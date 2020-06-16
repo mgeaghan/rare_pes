@@ -170,12 +170,15 @@ def pes_df_init(sample_list, gene_set_list):
     return(df)
 
 def score_pes(sample_list, gene_set_list, gene_sets_variants_info, var_annotations, ref_allele, plink_data):
+    print("Calculating PES scores...")
     if ref_allele == 1:
         dosage_df = 1 - pd.DataFrame(plink_data.sel().values, index=plink_data.sample.values, columns=plink_data.snp.values)/2  # dosage of a0 ALT allele
     else:
         dosage_df = pd.DataFrame(plink_data.sel().values, index=plink_data.sample.values, columns=plink_data.snp.values)/2  # dosage of a1 ALT allele
     pes_df = pes_df_init(sample_list, gene_set_list)
+    num_samples = 1
     for i in sample_list:
+        print("Processing sample " + str(num_samples) + "...")
         for s in gene_set_list:
             pes_n = 0
             pes_d = 0
@@ -195,26 +198,32 @@ def score_pes(sample_list, gene_set_list, gene_sets_variants_info, var_annotatio
             else:
                 pes = None
             pes_df.loc[i, s] = pes
+        num_samples += 1
     return(pes_df)
 
 def main(args):
     """Main function"""
     # Import PLINK data
+    print("Importing PLINK data...")
     bed = args.bfile + ".bed"
     bim = args.bfile + ".bim"
     fam = args.bfile + ".fam"
     G = read_plink1_bin(bed, bim, fam, verbose = False)
     # Import gene location information
+    print("Importing gene location data...")
     gene_loc = pd.read_table(args.loc, sep='\t', header=None)
     gene_loc.columns = ["gene", "chr", "start", "end"]
     # Create dictionaries of {gene: [variant_list]} and {variant: [gene_list]}
+    print("Intersecting variant and gene positions...")
     gene_variants, variant_genes = get_gene_vars(gene_loc, G)
     # Create a dictionary of variant information
     variant_info = {v: get_var_chr_pos_a0_a1(v, G) for v in variant_genes}
     # Import gene/pathway data
+    print("Importing gene and pathway data...")
     genes = pd.read_csv(args.genes, index_col=args.genes_column)
     genes.drop_duplicates(inplace=True)
     # Import list of gene sets to score
+    print("Importing gene sets to score...")
     gene_sets_to_score = []
     with open(args.pathways, 'r') as f:
         reader = csv.reader(f)
@@ -231,6 +240,7 @@ def main(args):
                 gene_sets[s].append(g)
     # Gather variant annotation information
         # Import variant annotations
+    print("Importing variant annotations...")
     variant_annotations = import_annot(variant_info, args.ref_allele, args.annot, args.chr, args.pos, args.ref, args.alt, args.af, args.cadd, args.na, args.alpha, args.beta)
     # Update gene_variants, variant_genes and variant_info to remove un-annotated variants
     variant_genes = {v: variant_genes[v] for v in variant_genes if v in variant_annotations.index}
@@ -250,8 +260,10 @@ def main(args):
     gene_set_list = list(gene_sets_variants_info.keys())
     pes_df = score_pes(sample_list, gene_set_list, gene_sets_variants_info, variant_annotations, args.ref_allele, G)
     # write to file
+    print("Writing to output...")
     output_file = args.output + ".pes.txt"
     pes_df.to_csv(output_file)
+    print("DONE!")
 
 if __name__ == "__main__":
     arguments = check_args(sys.argv[1:])
