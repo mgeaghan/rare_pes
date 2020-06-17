@@ -1,0 +1,8 @@
+TODO:
+
+1.    Get all variants from original wgs.eur PLINK file.
+2.    Annotate variants.
+3.    Filter annotations: keep MAF < 0.01 or MAF < 0.001.
+4.    Find filtered annotated variants in .bim file.
+5.    Extract rare variants from PLINK files.
+6.    NOW I can run the rare PES script!
