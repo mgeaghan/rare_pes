@@ -226,9 +226,11 @@ def main(args):
     print("Calculating PES...")
     dosages = weight_dosages(get_dosages(newBFile, args.ref_allele), variant_annotations.set_index("var"), "weight")
     pes = dosages.dot(gene_sets_variants_info[0])/np.sqrt((dosages**2).dot(gene_sets_variants_info[1]**2))
-    # DEBUG
-    print(pes.head())
-    pass
+    # write to file
+    print("Writing to output...")
+    output_file = args.output + ".pes.txt"
+    pes_df.to_csv(output_file)
+    print("DONE!")
 
 if __name__ == "__main__":
     arguments = check_args(sys.argv[1:])
