@@ -229,7 +229,7 @@ def main(args):
     # write to file
     print("Writing to output...")
     output_file = args.output + ".pes.txt"
-    pes_df.to_csv(output_file)
+    pes.to_csv(output_file)
     print("DONE!")
 
 if __name__ == "__main__":
