@@ -1,4 +1,5 @@
 library(biomaRt)
+options(scipen=999)
 ensembl <- useMart('ENSEMBL_MART_ENSEMBL', 'hsapiens_gene_ensembl', host = 'http://grch37.ensembl.org')
 # get gene and transcript IDs, trancript type, gene name, chromosome and genomic coding start and end
 bm <- getBM(attributes = c('ensembl_gene_id', 'ensembl_transcript_id', 'ensembl_gene_id_version', 'ensembl_transcript_id_version', 'transcript_biotype', 'external_gene_name', 'chromosome_name', 'genomic_coding_start', 'genomic_coding_end'), mart = ensembl)
@@ -44,5 +45,9 @@ head(bm.filt.sort.merge)
 gene.genomic_coding <- data.frame(gene_name = bm.filt.sort.merge$external_gene_name, chr = bm.filt.sort.merge$chromosome_name, start = bm.filt.sort.merge$genomic_coding_start, end = bm.filt.sort.merge$genomic_coding_end)
 head(gene.genomic_coding)
 
+plink.gene.genomic_coding <- gene.genomic_coding[c(2, 3, 4, 1)]
+head(plink.gene.genomic_coding)
+
 # Write to file
-write.table(gene.genomic_coding, "bm.exon.pos.txt", quote = FALSE, row.names = FALSE, col.names = FALSE, sep = '\t')
+#write.table(gene.genomic_coding, "bm.exon.pos.txt", quote = FALSE, row.names = FALSE, col.names = FALSE, sep = '\t')
+write.table(plink.gene.genomic_coding, "bm.exon.pos.txt", quote = FALSE, row.names = FALSE, col.names = FALSE, sep = '\t')

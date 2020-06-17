@@ -10,12 +10,12 @@ import statsmodels.api as sm
 import pandas as pd
 import numpy as np
 from scipy.stats import norm
-import seaborn as sns
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D  # for 3D plots
 import argparse
 import sys
 import csv
+#import seaborn as sns
+#import matplotlib.pyplot as plt
+#from mpl_toolkits.mplot3d import Axes3D  # for 3D plots
 
 class geneSetLinearRegression:
     gene_sets = {}

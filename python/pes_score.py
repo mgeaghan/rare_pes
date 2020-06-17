@@ -9,14 +9,16 @@ import statsmodels.api as sm
 import pandas as pd
 import numpy as np
 from scipy.stats import beta
-from pandas_plink import read_plink1_bin
-import seaborn as sns
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D  # for 3D plots
 import argparse
 import sys
 import csv
 from annotate import *
+import subprocess
+import re
+#from pandas_plink import read_plink1_bin
+#import seaborn as sns
+#import matplotlib.pyplot as plt
+#from mpl_toolkits.mplot3d import Axes3D  # for 3D plots
 
 def check_args(args=None):
     """Parse arguments"""
@@ -26,7 +28,7 @@ def check_args(args=None):
     parser.add_argument('-l', '--loc', help="Gene location data file. Must be a headerless, tab-delimited file, with four columns: gene ID, chromosome, start position and end position (1-based, inclusive). Chromosome codes must match PLINK .bim file for X/Y/MT.", required=True)
     parser.add_argument('-p', '--pathways', help="File containing pathways to be scored. One pathway ID per line. Each ID must match a column header present in the --genes file.", required=True)
     parser.add_argument('-B', '--bfile', help="PLINK file prefix.", required=True)
-    parser.add_argument('-r', '--ref_allele', help="Reference allele in PLINK data. Must be either '0' or '1', i.e. PLINK data must be calculated relative to the reference genome.", required=True)
+    parser.add_argument('-r', '--ref_allele', help="Reference allele in PLINK data. Must be either '1' or '2', corresponding to the A1 or A2 allele in the PLINK .bim file, i.e. PLINK data must be calculated relative to the reference genome.", required=True)
     parser.add_argument('-v', '--annot', help="Variant annotation file. Must contain a header line and at least four columns: chromosome, position, REF allele and ALT allele. Chromosome codes must match PLINK .bim file for X/Y/MT.", required=True)
     parser.add_argument('-f', '--af', help="Allele frequency column header for variant annotation file.", required=True)
     parser.add_argument('-s', '--cadd', help="CADD score column header for variant annotation file.", required=True)
@@ -40,119 +42,129 @@ def check_args(args=None):
     parser.add_argument('-o', '--output', help="Prefix for output files. Default = 'output'.", default="output")
     return(parser.parse_args(args))
 
-def get_gene_vars(gene_loc_df, plink_data):
-    """Takes a gene location dataframe and PLINK data. Returns a tuple of two dictionaries: {gene: [variant_list]} and {variant: [gene_list]}"""
-    # Organise data, re-name chr codes, sort by chr and pos/start
-    plink_df = plink_data.variant.to_dataframe()
-    new_chr = plink_df['chrom'].str.replace('X', '23').str.replace('Y', '24').str.replace('XY', '25').str.replace('MT', '26').str.replace('M', '26')
-    plink_df = plink_df.assign(chrom=new_chr)
-    plink_df = plink_df[["snp", "chrom", "pos"]].astype({"chrom": "int32", "pos": "int32"})
-    plink_df.sort_values(by=['chrom', 'pos'], inplace=True)
-    genes_df = gene_loc_df.copy()
-    new_chr = genes_df['chr'].str.replace('X', '23').str.replace('Y', '24').str.replace('XY', '25').str.replace('MT', '26').str.replace('M', '26')
-    genes_df = genes_df.assign(chr=new_chr)
-    genes_df = genes_df.astype({"chr": "int32", "start": "int32", "end": "int32"})
-    genes_df.sort_values(by=['chr', 'start', 'end'], inplace=True)
-    genes_df.reset_index(drop=True, inplace=True)
-    # Iterate over rows of both dataframes
-    variant_genes = {}
-    gene_variants = {}
-    plink_iter = plink_df.iterrows()
-    genes_iter = genes_df.iterrows()
-    plink_idx, plink_val = next(plink_iter)
-    genes_idx, genes_val = next(genes_iter)
-    i = 0
-    while True:
-        try:
-            var_chr = plink_val[1]
-            gen_chr = genes_val[1]
-            if var_chr < gen_chr:
-                plink_idx, plink_val = next(plink_iter)  # next variant
-            elif var_chr > gen_chr:
-                genes_idx, genes_val = next(genes_iter)  # next gene
+def parse_sets(set_file):
+    """Parse a .set file from PLINK."""
+    sets = {}
+    with open(set_file, 'r') as f:
+        lineIsSetName = True
+        setName = ""
+        setVars = []
+        for line in f:
+            line = line.strip('\n')
+            if line == "":
+                continue
+            elif lineIsSetName:
+                setName = line
+                lineIsSetName = False
+            elif line == "END":
+                if setVars != []:
+                    try:
+                        sets[setName].append(setVars)
+                    except KeyError:
+                        sets[setName] = setVars
+                    sets[setName] = list(set(sets[setName]))
+                setName = ""
+                setVars = []
+                lineIsSetName = True
             else:
-                var_pos = plink_val[2]
-                gen_start = genes_val[2]
-                gen_end = genes_val[3]
-                if var_pos < gen_start:
-                    plink_idx, plink_val = next(plink_iter)  # next variant
-                elif var_pos > gen_end:
-                    genes_idx, genes_val = next(genes_iter)  # next gene
-                else:
-                    var_name = plink_val[0]
-                    genes_iter_2 = genes_df.iloc[genes_idx:].iterrows()
-                    for genes_2_idx, genes_2_val in genes_iter_2:
-                        gen_2_start = genes_2_val[2]
-                        gen_2_end = genes_2_val[3]
-                        if var_pos >= gen_2_start and var_pos <= gen_2_end:
-                            gen_2_name = genes_2_val[0]
-                            try:
-                                if gen_2_name not in variant_genes[var_name]:
-                                    variant_genes[var_name].append(gen_2_name)
-                            except KeyError:
-                                variant_genes[var_name] = [gen_2_name]
-                            try:
-                                if var_name not in gene_variants[gen_2_name]:
-                                    gene_variants[gen_2_name].append(var_name)
-                            except KeyError:
-                                gene_variants[gen_2_name] = [var_name]
-                        else:
-                            plink_idx, plink_val = next(plink_iter)  # next variant
-                            break
-        except StopIteration:
-            break
-    return((gene_variants, variant_genes))
+                setVars.append(line)
+    return(sets)
 
-def get_var_chr_pos_a0_a1(snp, plink_data):
-    """Returns variant chromosome, position, a0 and a1 alleles."""
-    var = plink_data.sel(variant=list(plink_data.variant.values[plink_data.snp.values == snp]))
-    chr = var.chrom.values[0]
-    pos = var.pos.values[0]
-    a0 = var.a0.values[0]
-    a1 = var.a1.values[0]
-    return((chr, pos, a0, a1))
+def plink_sets(bfile, locfile, newbfile):
+    """Takes a plink binary file prefix and a gene location file (headerless, four columns: CHR, START, END, GENE_NAME) and creates a new plink binary file set subset by the gene list and a plink .set file. Function returns the .set file name."""
+    subprocess.run(["plink", "--bfile", bfile, "--keep-allele-order", "--make-set", locfile, "--gene-all", "--write-set", "--make-bed", "--out", newbfile])
+    setFile = newbfile + ".set"
+    return(setFile)
 
-def get_cohort_af(snp, plink_data):
-    """Calculate SNP allele frequency based on PLINK data."""
-    var = plink_data.sel(variant=list(plink_data.variant.values[plink_data.snp.values == snp]))
-    return(np.sum(var.values)/(len(plink_data.sample.values)*2))
+def get_var_info(bfile, ref_allele):
+    """Takes a plink binary file prefix and a ref_allele argument (either 1 or 2 corresponding to either A1 or A2 being the REF allele) and returns a dictionary of information for each variant ({variant: [CHR, POS, REF, ALT]})."""
+    bimFile = bfile + ".bim"
+    var_info = {}
+    with open(bimFile, 'r') as f:
+        reader = csv.reader(f, delimiter="\t")
+        for line in reader:
+            var_name = str(line[1])
+            chr = str(line[0])
+            pos = str(line[3])
+            if ref_allele == 1:
+                ref = str(line[4])
+                alt = str(line[5])
+            elif ref_allele == 2:
+                ref = str(line[5])
+                alt = str(line[4])
+            else:
+                raise ValueError("get_var_info: ref_allele argument must be an integer 1 or 2.")
+            var_info[var_name] = [chr, pos, ref, alt]
+    return(var_info)
 
-def get_a1_dosage(snp, sample, plink_data):
-    """Returns the dosage of the a1 allele for the given SNP in the given individual for the given PLINK data set"""
-    dosage = int(plink_data.sel(variant=list(plink_data.variant.values[plink_data.snp.values==snp]), sample=sample).values)/2
-    return(dosage)
+def get_var_info_concat(bfile, ref_allele):
+    """Takes a plink binary file prefix and a ref_allele argument (either 1 or 2 corresponding to either A1 or A2 being the REF allele) and returns a dictionary of information for each variant ({variant: CHR:POS:REF:ALT})."""
+    var_info = get_var_info(bfile, ref_allele)
+    var_info_concat = {v: ":".join(var_info[v]) for v in var_info}
+    return(var_info_concat)
 
-def get_a0_dosage(snp, sample, plink_data):
-    """Returns the dosage of the a0 allele for the given SNP in the given individual for the given PLINK data set"""
-    return(1 - get_a1_dosage(snp, sample, plink_data))
+def get_dosages(bfile, ref_allele):
+    """Get the dosages for each variant and each individual."""
+    if ref_allele == 1:
+        bimFile = bfile + ".bim"
+        newbfile = bfile + ".swap_alleles"
+        print("Swapping A1 and A2 alleles in PLINK...")
+        subprocess.run(["plink", "--bfile", bfile, "--a2-allele", bimFile, 5, 2, "--make-bed", "--out", newbfile])
+        plinkFile = newbfile
+    else:
+        plinkFile = bfile
+    print("Getting dosages from PLINK...")
+    newbfile = plinkFile + ".dosages"
+    subprocess.run(["plink", "--bfile", plinkFile, "--keep-allele-order", "--recode", "A", "tab", "--out", newbfile])
+    dosageFile = newbfile + ".raw"
+    dosages_df = pd.read_table(dosageFile, sep="\t", na_values="NA", index_col="IID")
+    cols = [c for c in list(dosages_df.columns) if c not in ["FID", "PAT", "MAT", "SEX", "PHENOTYPE"]]
+    dosages_df = dosages_df[cols]/2
+    dosages_df.fillna(value=0, inplace=True)  # missing values should be set to 0
+    regex = re.compile("^(.*)_[^_]+$")
+    cols = {c: regex.match(c).group(1) for c in cols}
+    dosages_df.rename(columns=cols, inplace=True)
+    return(dosages_df)
 
-def get_set_variant_info(gene_info, gene_set_info, variant_list, gene_variant_info, gene_weights):
-    gene_sets_variants_info = {s: {} for s in gene_set_info}
-    for s in gene_set_info:
+def weight_dosages(dosages_df, annotations, weights):
+    """Weights dosages dataframe by the weights column in the annotations dataframe."""
+    d_cols = list(dosages_df.columns)
+    a_idx = list(annotations.index)
+    keep_cols = [c for c in d_cols if c in a_idx]
+    return(dosages_df[keep_cols].apply(axis=0, func=lambda x: x * annotations.loc[x.name, weights]))
+
+def get_set_variant_info(variant_list, gene_sets, gene_info, gene_variants, gene_weights):
+    """Returns a tuple of two dataframes of variants and gene sets; the first with the respective gene weight * Z-score for each pair; the second with just the gene weights for each pair."""
+    set_var_z = pd.DataFrame(index=variant_list, columns=list(gene_sets.keys())).fillna(0)
+    set_var_w = pd.DataFrame(index=variant_list, columns=list(gene_sets.keys())).fillna(0)
+    for s in gene_sets:
         seen_variants = []
-        for g in gene_set_info[s]:
-            if g in gene_variant_info:
-                for v in gene_variant_info[g]:
+        for g in gene_sets[s]:
+            if g in gene_variants:
+                for v in gene_variants[g]:
                     if v in variant_list:
                         if v not in seen_variants:
                             # get gene z value
                             z = gene_info.loc[g, 'z']
                             # get gene weight
                             w = gene_weights[g]
-                            gene_sets_variants_info[s][v] = (g, z, w)
+                            set_var_z.loc[v, s] = z
+                            set_var_w.loc[v, s] = w
                             seen_variants.append(v)
                         else:
                             # check if new z value is higher or lower than the previous z value - update info if higher
-                            z_prev = gene_sets_variants_info[s][v][1]
+                            z_prev = set_var_z.loc[v, s]
                             z_new = gene_info.loc[g, 'z']
                             if z_new > z_prev:
                                 w_new = gene_weights[g]
-                                gene_sets_variants_info[s][v] = (g, z_new, w_new)
+                                set_var_z.loc[v, s] = z_new
+                                set_var_w.loc[v, s] = w_new
                             elif z_new == z_prev:
-                                w_prev = gene_sets_variants_info[s][v][2]
+                                w_prev = t_var_w.loc[v, s]
                                 w_new = gene_weights[g]
                                 if w_new > w_prev:
-                                    gene_sets_variants_info[s][v] = (g, z_new, w_new)
+                                    t_var_z.loc[v, s] = z_new
+                                    t_var_w.loc[v, s] = w_new
                                 else:
                                     continue
                             else:
@@ -161,64 +173,16 @@ def get_set_variant_info(gene_info, gene_set_info, variant_list, gene_variant_in
                         continue
             else:
                 continue
-    gene_sets_variants_info_short = {s: gene_sets_variants_info[s] for s in gene_sets_variants_info if not gene_sets_variants_info[s] == {}}
-    return(gene_sets_variants_info_short)
-
-def pes_df_init(sample_list, gene_set_list):
-    len_samples = len(sample_list)
-    df = pd.DataFrame({s: [None]*len_samples for s in gene_set_list}, index=sample_list)
-    return(df)
-
-def score_pes(sample_list, gene_set_list, gene_sets_variants_info, var_annotations, ref_allele, plink_data):
-    print("Calculating PES scores...")
-    if ref_allele == 1:
-        dosage_df = 1 - pd.DataFrame(plink_data.sel().values, index=plink_data.sample.values, columns=plink_data.snp.values)/2  # dosage of a0 ALT allele
-    else:
-        dosage_df = pd.DataFrame(plink_data.sel().values, index=plink_data.sample.values, columns=plink_data.snp.values)/2  # dosage of a1 ALT allele
-    pes_df = pes_df_init(sample_list, gene_set_list)
-    num_samples = 1
-    for i in sample_list:
-        print("Processing sample " + str(num_samples) + "...")
-        for s in gene_set_list:
-            pes_n = 0
-            pes_d = 0
-            for v in gene_sets_variants_info[s]:
-                vd = dosage_df.loc[i, v]
-                vsvf = var_annotations.loc[v, 'weight']  # score weight * frequency weight
-                # vs = var_annotations.loc[v, 'vs']  # score weight
-                # vf = var_annotations.loc[v, 'vf']  # frequency weight
-                wg = gene_sets_variants_info[s][v][2]
-                zg = gene_sets_variants_info[s][v][1]
-                # weight = (vd * vs * vf * wg)
-                weight = (vd * vsvf * wg)
-                pes_n += (weight * zg)
-                pes_d += (weight ** 2)
-            if not pes_d == 0:
-                pes = pes_n / np.sqrt(pes_d)
-            else:
-                pes = None
-            pes_df.loc[i, s] = pes
-        num_samples += 1
-    return(pes_df)
+    return((set_var_z * set_var_w, set_var_w))
 
 def main(args):
-    """Main function"""
-    # Import PLINK data
-    print("Importing PLINK data...")
-    bed = args.bfile + ".bed"
-    bim = args.bfile + ".bim"
-    fam = args.bfile + ".fam"
-    G = read_plink1_bin(bed, bim, fam, verbose = False)
-    # Import gene location information
-    print("Importing gene location data...")
-    gene_loc = pd.read_table(args.loc, sep='\t', header=None)
-    gene_loc.columns = ["gene", "chr", "start", "end"]
-    # Create dictionaries of {gene: [variant_list]} and {variant: [gene_list]}
-    print("Intersecting variant and gene positions...")
-    gene_variants, variant_genes = get_gene_vars(gene_loc, G)
-    # Create a dictionary of variant information
-    variant_info = {v: get_var_chr_pos_a0_a1(v, G) for v in variant_genes}
-    # Import gene/pathway data
+    """Main function."""
+    # Intersect variants and genes using PLINK
+    print("Intersecting variants and genes in PLINK...")
+    newBFile = args.bfile + ".pes_score.subset"
+    setsFile = plink_sets(args.bfile, args.loc, newBFile)
+    gene_variants = parse_sets(setsFile)
+    # Import gene and pathway data file
     print("Importing gene and pathway data...")
     genes = pd.read_csv(args.genes, index_col=args.genes_column)
     genes.drop_duplicates(inplace=True)
@@ -238,38 +202,39 @@ def main(args):
         for s in gene_sets_to_score:
             if (s in genes_columns) and (genes.loc[g, s] == 1):
                 gene_sets[s].append(g)
-    # Gather variant annotation information
-        # Import variant annotations
+    # Import variant information
+    print("Importing variant information...")
+    variant_info = get_var_info_concat(newBFile, args.ref_allele)
+    # Import variant annotations and check for issues
     print("Importing variant annotations...")
-    variant_annotations = import_annot(variant_info, args.ref_allele, args.annot, args.chr, args.pos, args.ref, args.alt, args.af, args.cadd, args.na, args.alpha, args.beta)
-    # Update gene_variants, variant_genes and variant_info to remove un-annotated variants
-    variant_genes = {v: variant_genes[v] for v in variant_genes if v in variant_annotations.index}
-    variant_info = {v: variant_info[v] for v in variant_info if v in variant_annotations.index}
-    gene_variants = {g: [v for v in gene_variants[g] if v in variant_annotations.index] for g in gene_variants}
+    variant_annotations = import_annot(variant_info, args.annot, args.chr, args.pos, args.ref, args.alt, args.af, args.cadd, args.na, args.alpha, args.beta)
+    # Remove un-annotated variants
+    var_list = list(variant_annotations["var"])
+    gene_variants = {g: [v for v in gene_variants[g] if v in var_list] for g in gene_variants}
     gene_variants = {g: gene_variants[g] for g in gene_variants if not gene_variants[g] == []}
-    # get min and max variants per gene and calculate the relative fraction of variants per gene for the cohort
+    # Calculate weights for genes
+    ## Get min and max variants per gene and calculate the relative fraction of variants per gene for the cohort
+    print("Calculating gene weights...")
     variants_per_gene = {g: len(gene_variants[g]) for g in gene_variants}
     max_variants_per_gene = max(list(variants_per_gene.values()))
     min_variants_per_gene = min(list(variants_per_gene.values()))
     rel_variants_per_gene_weights = {g: 1 - ((variants_per_gene[g] - min_variants_per_gene)/(1 + (max_variants_per_gene - min_variants_per_gene))) for g in variants_per_gene}
-    # get the unique gene for each variant in each pathway. If a variant overlaps two genes in a single pathway, take the gene with the higher Z score.
-    variant_list = list(variant_annotations.index)
-    gene_sets_variants_info = get_set_variant_info(genes, gene_sets, variant_list, gene_variants, rel_variants_per_gene_weights)
-    # calculate PES for each pathway for each individual
-    sample_list = list(G.sample.values)
-    gene_set_list = list(gene_sets_variants_info.keys())
-    pes_df = score_pes(sample_list, gene_set_list, gene_sets_variants_info, variant_annotations, args.ref_allele, G)
-    # write to file
-    print("Writing to output...")
-    output_file = args.output + ".pes.txt"
-    pes_df.to_csv(output_file)
-    print("DONE!")
+    # For each pathway, get the variants and unique gene for each variant; if a variant overlaps multiple genes, use the higher Z-value, then the higher weight value to select the unique gene
+    print("Gathering gene information for each variant in each pathway...")
+    gene_sets_variants_info = get_set_variant_info(var_list, gene_sets, genes, gene_variants, rel_variants_per_gene_weights)
+    # Calculate PES for each pathway for each individual
+    print("Calculating PES...")
+    dosages = weight_dosages(get_dosages(newBFile, args.ref_allele), variant_annotations.set_index("var"), "weight")
+    pes = dosages.dot(gene_sets_variants_info[0])/np.sqrt((dosages**2).dot(gene_sets_variants_info[1]**2))
+    # DEBUG
+    print(pes.head())
+    pass
 
 if __name__ == "__main__":
     arguments = check_args(sys.argv[1:])
     # Check ref allele code (0, 1 or None)
-    if arguments.ref_allele not in ['0', '1', 0, 1]:
-        raise ValueError("Argument --ref_allele must be either '0', or '1'")
+    if arguments.ref_allele not in ['1', '2', 1, 2]:
+        raise ValueError("Argument --ref_allele must be either '1', or '2'")
     else:
         arguments.ref_allele = int(arguments.ref_allele)
     # Ensure alpha and beta are floats

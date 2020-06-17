@@ -1,0 +1,5 @@
+from pes_score import *
+arguments = ['-g', '../../analysis/out/scz.leonenko.gsa.msigdb.lin.nocorr.probit.out.genes.txt', '-l', '../../analysis/db/gene.ranges.auto.txt', '-p', '../../analysis/out/scz.leonenko.gsa.msigdb.lin.nocorr.probit.out.sig.sets.txt', '-B', '../../analysis/db/plink/wgs.eur.rare_0.001', '-r', '2', '-v', '../../analysis/db/annot/test.annot.txt', '-f', 'AF_nfe_exome', '-s', 'PHRED', '-C', 'Chr', '-P', 'Start', '-R', 'Ref', '-A', 'Alt', '-n', '.', '-o', 'test']
+args = check_args(arguments)
+args.ref_allele = 2
+main(args)

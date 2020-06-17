@@ -5,3 +5,11 @@ pandas_plink
 scipy
 seaborn as sns
 statsmodels
+
+# new dependencies
+numpy
+pandas
+plink
+scipy
+statsmodels
+PLINK

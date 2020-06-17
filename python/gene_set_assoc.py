@@ -12,15 +12,15 @@ import statsmodels.api as sm
 import pandas as pd
 import numpy as np
 from scipy.stats import norm
-import seaborn as sns
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D  # for 3D plots
 import argparse
 import sys
 import csv
 from linregression import *
 from logregression import *
 from rankNorm import rankNorm
+#import seaborn as sns
+#import matplotlib.pyplot as plt
+#from mpl_toolkits.mplot3d import Axes3D  # for 3D plots
 
 model_list = ["linear", "logistic"]
 
