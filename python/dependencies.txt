@@ -9,7 +9,6 @@ statsmodels
 # new dependencies
 numpy
 pandas
-plink
 scipy
 statsmodels
 PLINK

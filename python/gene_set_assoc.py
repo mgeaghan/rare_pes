@@ -103,12 +103,18 @@ def main(args):
         gene_lengths.columns = ["len"]
     else:
         raise ValueError("Incorrectly-formatted gene lengths file.")
+    # remove genes for which len = 0
+    gene_lengths = gene_lengths[gene_lengths["len"] != 0]
+    # get log_len
     gene_lengths = gene_lengths.assign(log_len = np.log(gene_lengths["len"]))
     # merge gene lengths with summary statistics
     df_filt_len = df_filt.merge(gene_lengths, left_index=True, right_index=True)
     # add minor allele count (case_lof + control_lof) and log minor allele count
     if 'mac' not in df_filt_len.columns:
         df_filt_len = df_filt_len.assign(mac=(df_filt_len['mac_con'] + df_filt_len['mac_cas']))
+        # remove genes for which MAC = 0
+        df_filt_len = df_filt_len[df_filt_len["mac"] != 0]
+    # get log_mac
     df_filt_len = df_filt_len.assign(log_mac=(np.log(df_filt_len['mac'])))
     # import gene sets
     gene_sets = {}
