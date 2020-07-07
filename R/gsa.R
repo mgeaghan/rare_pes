@@ -28,6 +28,19 @@ getGeneSets <- function(file) {
 	return(geneSets)
 }
 
+addGeneSets <- function(df, geneSets) {
+  # Add gene set information to data frame
+  if (TRUE %in% (rownames(geneSets) %in% colnames(df))) {
+    warning("Columns present in supplied data.frame matching gene sets! These will be overwritten!")
+  }
+  newDf <- df
+  geneSetNames <- rownames(geneSets)
+  for (s in geneSetNames) {
+    newDf[[s]] <- as.numeric(newDf$gene %in% as.character(geneSets[s,]))
+  }
+  return(newDf)
+}
+
 runGeneSetLogit <- function(df, geneSets, gene = "gene", stat = "z", covars) {
 	# given a data frame with a column of gene names, summary statistic 'stat' and covariates supplied in vector 'covars', perform gene set analysis using a logistic regression model
 	if (FALSE %in% (c(gene, stat, covars) %in% colnames(df))) {
@@ -102,4 +115,42 @@ getLMStats <- function(linMods) {
 		return(table(linMods[[x]]$model$set)[2])
 	})
 	return(linModStats)
+}
+
+runDefaultGSA <- function(inputFile, geneHeader, pHeader, outPrefix) {
+  # read in gene-level results from study
+  df <- read.csv(inputFile, header = TRUE)
+  rownames(df) <- df[[geneHeader]]
+  # remove genes with n (minor allele count) == 0
+  df <- df[df$n > 0,]
+  
+  df$p.finite <- getFinitePs(df[[pHeader]])
+  df$z <- zTransformPValue(df$p.finite)
+  df$len <- getGeneLengths(rownames(df), "../db/len.txt")
+  df <- df[!is.na(df$len),]
+  df$log.n <- log(df$n)
+  df$log.len <- log(df$len)
+  geneSetMsigdb <- getGeneSets("../db/gene_sets/MsigDB_canonical_and_hallmark_Tclin_v_6.1.0.gmt")
+  linModsMsigdb <- runGeneSetLM(df, geneSetMsigdb, gene = "gene.ensembl", covars = c("log.n", "log.len"))
+  linModStatsMsigdb <- getLMStats(linModsMsigdb)
+  geneSetTclin <- getGeneSets("../db/gene_sets/Tclin_enriched_MsigDB_hallmark_canonical_TCRD_v.6.1.0.gmt")
+  linModsTclin <- runGeneSetLM(df, geneSetTclin, gene = "gene.ensembl", covars = c("log.n", "log.len"))
+  linModStatsTclin <- getLMStats(linModsTclin)
+  
+  msigdbPrefix <- paste(outPrefix, "gsa.msigdb", sep = ".")
+  tclinPrefix <- paste(outPrefix, "gsa.msigdb", sep = ".")
+  
+  write.table(linModStatsMsigdb, paste(msigdbPrefix, ".txt", sep = ""), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+  write.table(linModStatsTclin, paste(tclinPrefix, ".txt", sep = ""), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+  write.table(linModStatsMsigdb$set[linModStatsMsigdb$p < 0.05], paste(msigdbPrefix, ".sigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+  write.table(linModStatsTclin$set[linModStatsTclin$p < 0.05], paste(tclinPrefix, ".sigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+  
+  dfMsigdb <- addGeneSets(df, geneSetMsigdb)
+  dfTclin <- addGeneSets(df, geneSetTclin)
+  
+  write.csv(dfMsigdb, paste(msigdbPrefix, ".genes.txt", sep = ""), quote = FALSE, row.names = FALSE)
+  write.csv(dfTclin, paste(tclinPrefix, ".genes.txt", sep = ""), quote = FALSE, row.names = FALSE)
+  
+  # save(df, linModsMsigdb, linModStatsTclin, linModStatsMsigdb, linModStatsTclin, dfMsigdb, dfTclin, file = paste(outPrefix, ".gsa.RData", sep = ""))
+  
 }
