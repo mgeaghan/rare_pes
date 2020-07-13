@@ -83,9 +83,9 @@ getLogitStats <- function(logMods) {
 	for (s in names(logMods)) {
 		coefs <- summary(logMods[[s]])$coefficients
 		if ("stat" %in% rownames(coefs)) {
-			logModStats[[s]] <- c(s, summary(logMods[[s]])$coefficients["stat", "Pr(>|z|)"])
+			logModStats[[s]] <- data.frame(set = s, p = summary(logMods[[s]])$coefficients["stat", "Pr(>|z|)"])
 		} else {
-			logModStats[[s]] <- c(s, NA)
+			logModStats[[s]] <- data.frame(set = s, p = NA)
 		}
 	}
 	logModStats <- as.data.frame(do.call(rbind, logModStats))
@@ -103,9 +103,9 @@ getLMStats <- function(linMods) {
 	for (s in names(linMods)) {
 		coefs <- summary(linMods[[s]])$coefficients
 		if ("set" %in% rownames(coefs)) {
-			linModStats[[s]] <- c(s, summary(linMods[[s]])$coefficients["set", "Pr(>|t|)"])
+			linModStats[[s]] <- data.frame(set = s, p = summary(linMods[[s]])$coefficients["set", "Pr(>|t|)"])
 		} else {
-			linModStats[[s]] <- c(s, NA)
+			linModStats[[s]] <- data.frame(set = s, p = NA)
 		}
 	}
 	linModStats <- as.data.frame(do.call(rbind, linModStats))
