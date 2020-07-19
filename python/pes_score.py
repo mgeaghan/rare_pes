@@ -160,11 +160,11 @@ def get_set_variant_info(variant_list, gene_sets, gene_info, gene_variants, gene
                                 set_var_z.loc[v, s] = z_new
                                 set_var_w.loc[v, s] = w_new
                             elif z_new == z_prev:
-                                w_prev = t_var_w.loc[v, s]
+                                w_prev = set_var_w.loc[v, s]
                                 w_new = gene_weights[g]
                                 if w_new > w_prev:
-                                    t_var_z.loc[v, s] = z_new
-                                    t_var_w.loc[v, s] = w_new
+                                    set_var_z.loc[v, s] = z_new
+                                    set_var_w.loc[v, s] = w_new
                                 else:
                                     continue
                             else:
