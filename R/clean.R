@@ -1,68 +1,17 @@
-# Download BioMart table to convert gene names
-library(reshape2)
-library(biomaRt)
-#ensembl <- useMart('ENSEMBL_MART_ENSEMBL', 'hsapiens_gene_ensembl', host = 'http://grch37.ensembl.org')
-ensembl <- useMart('ENSEMBL_MART_ENSEMBL', 'hsapiens_gene_ensembl')
-bm <- getBM(attributes = c('ensembl_gene_id', 'external_gene_name'), mart = ensembl)
-bm2 <- getBM(attributes = c('ensembl_gene_id', 'external_synonym'), mart = ensembl)
-bm <- unique(bm)
-bm2 <- unique(bm2)
-colnames(bm) <- c("gene.ensembl", "gene.name")
-colnames(bm2) <- c("gene.ensembl", "gene.name")
-bm <- bm[bm$gene.name != "",]
-bm2 <- bm2[bm2$gene.name != "",]
-bm <- bm[(!is.na(bm$gene.ensembl)) & (!is.na(bm$gene.name)),]
-bm2 <- bm2[(!is.na(bm2$gene.ensembl)) & (!is.na(bm2$gene.name)),]
-bm2 <- unique(rbind(bm2, bm))
-convert <- merge(bm2, bm, by = "gene.ensembl", all = TRUE)
-colnames(convert) <- c("gene.ensembl", "gene.name", "gene.name.ensembl")
-convert2 <- unique(convert[c("gene.name", "gene.name.ensembl")])
-convert2 <- unique(do.call(rbind, apply(convert2, 1, function(x) {
-  gene <- as.character(x[1])
-  gene.ens <- as.character(x[2])
-  tmp <- convert2[convert2$gene.name==gene,2]
-  if (gene %in% tmp) {
-    return(data.frame(gene.name = gene, gene.name.ensembl = gene))
-  } else {
-    return(c(gene.name = gene, gene.name.ensembl = gene.ens))
-  }
-})))
-# Function to return a vector of the number of synonyms for each of a vector of gene symbols
-numSyn <- function(x) {
-  n <- sapply(x, function(y) {
-    return(dim(convert2[convert2$gene.name==y,])[1])
-  })
-  return(n)
+source("../../rare_pes/R/gsa.R")
+convert <- get_bm_convert()
+meta.fisher <- function(x) {
+  x2 <- (-2) * sum(log(x), na.rm = TRUE)
+  k <- sum(is.finite(x))
+  p <- pchisq(q = x2, df = 2*k, lower.tail = FALSE)
+  return(p)
 }
-# Function to return a vector of Ensembl gene names for a given vector of gene symbols
-ensGene <- function(x) {
-  id <- sapply(x, function(y) {
-    ids <- convert2$gene.name.ensembl[convert2$gene.name == y]
-    if (length(ids) == 1) {
-      return(ids)
-    } else {
-      return(NA)
-    }
-  })
-  return(id)
-}
-# Function to return a vector of Ensembl gene names for a given vector of Ensembl gene IDs
-ensId2Gene <- function(x) {
-  id <- sapply(x, function(y) {
-    ids <- bm$gene.name[bm$gene.ensembl == y]
-    if (length(ids) == 1) {
-      return(ids)
-    } else {
-      return(NA)
-    }
-  })
-  return(id)
-}
+source("../../rare_pes/R/acat.R")
 ########## CLEAN DATA ##########
 # SCZ Leonenko
 df <- read.csv("original_csv/scz.leonenko.csv", header = TRUE, stringsAsFactors = FALSE)
 colnames(df) <- c("gene", "chr", "gene.start", "gene.end", "p.skat.o", "p.burden", "or.burden", "n")
-df$gene.ensembl <- ensGene(df$gene)
+df$gene.ensembl <- gene2EnsGene(df$gene, convert)
 df <- df[c("gene.ensembl", "gene", "chr", "gene.start", "gene.end", "p.skat.o", "p.burden", "or.burden", "n")]
 df_na <- df
 df <- df[!is.na(df$gene.ensembl),]
@@ -82,6 +31,8 @@ dfDups <- do.call(rbind, lapply(dfDupNames, function(x) {
 }))
 df <- rbind(df[!(df$gene.ensembl %in% dfDupNames),],
             dfDups)
+df_na_2 <- df
+df <- df[!is.na(df$gene.ensembl) & !is.na(df$p.skat.o),]
 write.csv(df, file = "scz.leonenko.csv", row.names = FALSE, col.names = TRUE, na = "")
 
 # SCZ exTADA
@@ -94,7 +45,7 @@ colnames(df) <- c("gene", "denovos", "mutation.rates",
                   "bf", "pp", "q", "p")
 df$n <- rowSums(df[grepl("^(cases|controls)\\.", colnames(df), perl = TRUE)], na.rm = TRUE)
 df$n[is.na(df$n)] <- 0
-df$gene.ensembl <- ensGene(df$gene)
+df$gene.ensembl <- gene2EnsGene(df$gene, convert)
 df <- df[c("gene.ensembl", "gene", "denovos", "mutation.rates",
            "cases.dbs1", "cases.dbs3", "cases.clin1", "cases.clin2", "cases.clin3",
            "cases.swe1", "cases.swe2", "cases.swe3",
@@ -119,9 +70,11 @@ dfDups <- do.call(rbind, lapply(dfDupNames, function(x) {
 }))
 df <- rbind(df[!(df$gene.ensembl %in% dfDupNames),],
             dfDups)
+df_na_2 <- df
+df <- df[!is.na(df$gene.ensembl) & !is.na(df$p),]
 write.csv(df, file = "scz.extada.csv", row.names = FALSE, col.names = TRUE, na = "")
 
-# EPI: ASC
+# ASC
 df <- read.csv("original_csv/asc.csv", header = TRUE, stringsAsFactors = FALSE)
 colnames(df) <- c("gene", "description",
                   "cases.ptv.denovo", "controls.ptv.denovo",
@@ -137,7 +90,7 @@ df$p <- sapply(df$gene, function(x) {
 df$gene.ensemblId <- sapply(df$gene, function(x) {
   return(asc.p$ensembl_gene_id[asc.p$gene == x])
 })
-df$gene.ensembl <- ensId2Gene(df$gene.ensemblId)
+df$gene.ensembl <- ensId2EnsGene(df$gene.ensemblId, convert)
 df$n <- rowSums(df[grepl("^(cases|controls)\\.", colnames(df), perl = TRUE)], na.rm = TRUE)
 df$n[is.na(df$n)] <- 0
 df <- df[c("gene.ensembl", "gene", "gene.ensemblId", "description",
@@ -165,6 +118,8 @@ dfDups <- do.call(rbind, lapply(dfDupNames, function(x) {
 }))
 df <- rbind(df[!(df$gene.ensembl %in% dfDupNames),],
             dfDups)
+df_na_2 <- df
+df <- df[!is.na(df$gene.ensembl) & !is.na(df$p),]
 write.csv(df, file = "asc.csv", row.names = FALSE, col.names = TRUE, na = "")
 
 # EPI: DEE
@@ -176,7 +131,7 @@ colnames(df) <- c("gene", "description",
                   "p")
 df$n <- rowSums(df[grepl("^(cases|controls)\\.", colnames(df), perl = TRUE)], na.rm = TRUE)
 df$n[is.na(df$n)] <- 0
-df$gene.ensembl <- ensGene(df$gene)
+df$gene.ensembl <- gene2EnsGene(df$gene, convert)
 df <- df[c("gene.ensembl", "gene", "description",
            "cases.lof", "controls.lof", "p.lof",
            "cases.mpc", "controls.mpc", "p.mpc",
@@ -200,6 +155,8 @@ dfDups <- do.call(rbind, lapply(dfDupNames, function(x) {
 }))
 df <- rbind(df[!(df$gene.ensembl %in% dfDupNames),],
             dfDups)
+df_na_2 <- df
+df <- df[!is.na(df$gene.ensembl) & !is.na(df$p),]
 write.csv(df, file = "dee.csv", row.names = FALSE, col.names = TRUE, na = "")
 
 # EPI: EPI
@@ -211,7 +168,7 @@ colnames(df) <- c("gene", "description",
                   "p")
 df$n <- rowSums(df[grepl("^(cases|controls)\\.", colnames(df), perl = TRUE)], na.rm = TRUE)
 df$n[is.na(df$n)] <- 0
-df$gene.ensembl <- ensGene(df$gene)
+df$gene.ensembl <- gene2EnsGene(df$gene, convert)
 df <- df[c("gene.ensembl", "gene", "description",
            "cases.lof", "controls.lof", "p.lof",
            "cases.mpc", "controls.mpc", "p.mpc",
@@ -235,6 +192,8 @@ dfDups <- do.call(rbind, lapply(dfDupNames, function(x) {
 }))
 df <- rbind(df[!(df$gene.ensembl %in% dfDupNames),],
             dfDups)
+df_na_2 <- df
+df <- df[!is.na(df$gene.ensembl) & !is.na(df$p),]
 write.csv(df, file = "epi.csv", row.names = FALSE, col.names = TRUE, na = "")
 
 # EPI: GGE
@@ -246,7 +205,7 @@ colnames(df) <- c("gene", "description",
                   "p")
 df$n <- rowSums(df[grepl("^(cases|controls)\\.", colnames(df), perl = TRUE)], na.rm = TRUE)
 df$n[is.na(df$n)] <- 0
-df$gene.ensembl <- ensGene(df$gene)
+df$gene.ensembl <- gene2EnsGene(df$gene, convert)
 df <- df[c("gene.ensembl", "gene", "description",
            "cases.lof", "controls.lof", "p.lof",
            "cases.mpc", "controls.mpc", "p.mpc",
@@ -270,6 +229,8 @@ dfDups <- do.call(rbind, lapply(dfDupNames, function(x) {
 }))
 df <- rbind(df[!(df$gene.ensembl %in% dfDupNames),],
             dfDups)
+df_na_2 <- df
+df <- df[!is.na(df$gene.ensembl) & !is.na(df$p),]
 write.csv(df, file = "gge.csv", row.names = FALSE, col.names = TRUE, na = "")
 
 # EPI: NAFE
@@ -281,7 +242,7 @@ colnames(df) <- c("gene", "description",
                   "p")
 df$n <- rowSums(df[grepl("^(cases|controls)\\.", colnames(df), perl = TRUE)], na.rm = TRUE)
 df$n[is.na(df$n)] <- 0
-df$gene.ensembl <- ensGene(df$gene)
+df$gene.ensembl <- gene2EnsGene(df$gene, convert)
 df <- df[c("gene.ensembl", "gene", "description",
            "cases.lof", "controls.lof", "p.lof",
            "cases.mpc", "controls.mpc", "p.mpc",
@@ -305,4 +266,195 @@ dfDups <- do.call(rbind, lapply(dfDupNames, function(x) {
 }))
 df <- rbind(df[!(df$gene.ensembl %in% dfDupNames),],
             dfDups)
+df_na_2 <- df
+df <- df[!is.na(df$gene.ensembl) & !is.na(df$p),]
 write.csv(df, file = "nafe.csv", row.names = FALSE, col.names = TRUE, na = "")
+
+# SCZ SCHEMA
+df <- read.csv("original_csv/scz.schema.csv", header = TRUE, stringsAsFactors = FALSE)
+colnames(df) <- c("gene", "description", "case.lof", "control.lof", "case.miss.gte.3", "control.miss.gte.3", "case.miss.gte.2.lt.3", "control.miss.gte.2.lt.3", "denovo.lof", "denovo.miss", "p.meta")
+df$n <- rowSums(df[c("case.lof", "control.lof", "case.miss.gte.3", "control.miss.gte.3", "case.miss.gte.2.lt.3", "control.miss.gte.2.lt.3", "denovo.lof", "denovo.miss")])
+df$gene.ensembl <- ensId2EnsGene(df$gene, convert)
+df_na <- df
+df <- df[!is.na(df$gene) & !is.na(df$p.meta),]
+write.csv(df, file = "scz.schema.csv", row.names = FALSE, col.names = TRUE, na = "")
+
+# BIP
+df <- read.csv("original_csv/bip.csv", header = TRUE, stringsAsFactors = FALSE)
+colnames(df) <- c("gene", "description", "cases", "controls", "cases.ptv", "controls.ptv", "p.ptv", "or.ptv", "cases.d.miss", "controls.d.miss", "p.d.miss", "or.d.miss")
+df$n <- rowSums(df[grepl("^(cases|controls)\\.", colnames(df), perl = TRUE)], na.rm = TRUE)
+df$n[is.na(df$n)] <- 0
+df_na <- df
+df <- df[!(is.na(df$p.d.miss) & is.na(df$p.ptv)),]
+df$p.meta <- apply(df, 1, function(x) { meta.fisher(c(as.numeric(x[7]), as.numeric(x[11]))) })
+minP <- .Machine$double.eps
+maxP <- 1 - minP
+df$p.acat <- apply(df, 1, function(x) {
+  p.ptv <- as.numeric(x[7])
+  p.d.miss <- as.numeric(x[11])
+  if(is.na(p.ptv) & is.na(p.d.miss)) {
+    return(NA)
+  } else if(is.na(p.ptv)) {
+    return(p.d.miss)
+  } else if(is.na(p.d.miss)) {
+    return(p.ptv)
+  } else {
+    if(p.ptv > maxP) { p.ptv <- maxP }
+    if(p.d.miss > maxP) { p.d.miss <- maxP }
+    return(ACAT(c(p.ptv, p.d.miss)))
+  }
+})
+df$gene.ensembl <- ensId2EnsGene(df$gene, convert)
+df_na_2 <- df
+df <- df[!is.na(df$gene) & (!is.na(df$p.meta) | !is.na(df$p.acat)),]
+write.csv(df, file = "bip.csv", row.names = FALSE, col.names = TRUE, na = "")
+
+# BIP1
+df <- read.csv("original_csv/bip.1.csv", header = TRUE, stringsAsFactors = FALSE)
+colnames(df) <- c("gene", "description", "cases", "controls", "cases.ptv", "controls.ptv", "p.ptv", "or.ptv", "cases.d.miss", "controls.d.miss", "p.d.miss", "or.d.miss")
+df$n <- rowSums(df[grepl("^(cases|controls)\\.", colnames(df), perl = TRUE)], na.rm = TRUE)
+df$n[is.na(df$n)] <- 0
+df_na <- df
+df <- df[!(is.na(df$p.d.miss) & is.na(df$p.ptv)),]
+df$p.meta <- apply(df, 1, function(x) { meta.fisher(c(as.numeric(x[7]), as.numeric(x[11]))) })
+minP <- .Machine$double.eps
+maxP <- 1 - minP
+df$p.acat <- apply(df, 1, function(x) {
+  p.ptv <- as.numeric(x[7])
+  p.d.miss <- as.numeric(x[11])
+  if(is.na(p.ptv) & is.na(p.d.miss)) {
+    return(NA)
+  } else if(is.na(p.ptv)) {
+    return(p.d.miss)
+  } else if(is.na(p.d.miss)) {
+    return(p.ptv)
+  } else {
+    if(p.ptv > maxP) { p.ptv <- maxP }
+    if(p.d.miss > maxP) { p.d.miss <- maxP }
+    return(ACAT(c(p.ptv, p.d.miss)))
+  }
+})
+df$gene.ensembl <- ensId2EnsGene(df$gene, convert)
+df_na_2 <- df
+df <- df[!is.na(df$gene) & (!is.na(df$p.meta) | !is.na(df$p.acat)),]
+write.csv(df, file = "bip.1.csv", row.names = FALSE, col.names = TRUE, na = "")
+
+# BIP2
+df <- read.csv("original_csv/bip.2.csv", header = TRUE, stringsAsFactors = FALSE)
+colnames(df) <- c("gene", "description", "cases", "controls", "cases.ptv", "controls.ptv", "p.ptv", "or.ptv", "cases.d.miss", "controls.d.miss", "p.d.miss", "or.d.miss")
+df$n <- rowSums(df[grepl("^(cases|controls)\\.", colnames(df), perl = TRUE)], na.rm = TRUE)
+df$n[is.na(df$n)] <- 0
+df_na <- df
+df <- df[!(is.na(df$p.d.miss) & is.na(df$p.ptv)),]
+df$p.meta <- apply(df, 1, function(x) { meta.fisher(c(as.numeric(x[7]), as.numeric(x[11]))) })
+minP <- .Machine$double.eps
+maxP <- 1 - minP
+df$p.acat <- apply(df, 1, function(x) {
+  p.ptv <- as.numeric(x[7])
+  p.d.miss <- as.numeric(x[11])
+  if(is.na(p.ptv) & is.na(p.d.miss)) {
+    return(NA)
+  } else if(is.na(p.ptv)) {
+    return(p.d.miss)
+  } else if(is.na(p.d.miss)) {
+    return(p.ptv)
+  } else {
+    if(p.ptv > maxP) { p.ptv <- maxP }
+    if(p.d.miss > maxP) { p.d.miss <- maxP }
+    return(ACAT(c(p.ptv, p.d.miss)))
+  }
+})
+df$gene.ensembl <- ensId2EnsGene(df$gene, convert)
+df_na_2 <- df
+df <- df[!is.na(df$gene) & (!is.na(df$p.meta) | !is.na(df$p.acat)),]
+write.csv(df, file = "bip.2.csv", row.names = FALSE, col.names = TRUE, na = "")
+
+# BIP No Psych
+df <- read.csv("original_csv/bip.nopsych.csv", header = TRUE, stringsAsFactors = FALSE)
+colnames(df) <- c("gene", "description", "cases", "controls", "cases.ptv", "controls.ptv", "p.ptv", "or.ptv", "cases.d.miss", "controls.d.miss", "p.d.miss", "or.d.miss")
+df$n <- rowSums(df[grepl("^(cases|controls)\\.", colnames(df), perl = TRUE)], na.rm = TRUE)
+df$n[is.na(df$n)] <- 0
+df_na <- df
+df <- df[!(is.na(df$p.d.miss) & is.na(df$p.ptv)),]
+df$p.meta <- apply(df, 1, function(x) { meta.fisher(c(as.numeric(x[7]), as.numeric(x[11]))) })
+minP <- .Machine$double.eps
+maxP <- 1 - minP
+df$p.acat <- apply(df, 1, function(x) {
+  p.ptv <- as.numeric(x[7])
+  p.d.miss <- as.numeric(x[11])
+  if(is.na(p.ptv) & is.na(p.d.miss)) {
+    return(NA)
+  } else if(is.na(p.ptv)) {
+    return(p.d.miss)
+  } else if(is.na(p.d.miss)) {
+    return(p.ptv)
+  } else {
+    if(p.ptv > maxP) { p.ptv <- maxP }
+    if(p.d.miss > maxP) { p.d.miss <- maxP }
+    return(ACAT(c(p.ptv, p.d.miss)))
+  }
+})
+df$gene.ensembl <- ensId2EnsGene(df$gene, convert)
+df_na_2 <- df
+df <- df[!is.na(df$gene) & (!is.na(df$p.meta) | !is.na(df$p.acat)),]
+write.csv(df, file = "bip.nopsych.csv", row.names = FALSE, col.names = TRUE, na = "")
+
+# BIP Psych
+df <- read.csv("original_csv/bip.psych.csv", header = TRUE, stringsAsFactors = FALSE)
+colnames(df) <- c("gene", "description", "cases", "controls", "cases.ptv", "controls.ptv", "p.ptv", "or.ptv", "cases.d.miss", "controls.d.miss", "p.d.miss", "or.d.miss")
+df$n <- rowSums(df[grepl("^(cases|controls)\\.", colnames(df), perl = TRUE)], na.rm = TRUE)
+df$n[is.na(df$n)] <- 0
+df_na <- df
+df <- df[!(is.na(df$p.d.miss) & is.na(df$p.ptv)),]
+df$p.meta <- apply(df, 1, function(x) { meta.fisher(c(as.numeric(x[7]), as.numeric(x[11]))) })
+minP <- .Machine$double.eps
+maxP <- 1 - minP
+df$p.acat <- apply(df, 1, function(x) {
+  p.ptv <- as.numeric(x[7])
+  p.d.miss <- as.numeric(x[11])
+  if(is.na(p.ptv) & is.na(p.d.miss)) {
+    return(NA)
+  } else if(is.na(p.ptv)) {
+    return(p.d.miss)
+  } else if(is.na(p.d.miss)) {
+    return(p.ptv)
+  } else {
+    if(p.ptv > maxP) { p.ptv <- maxP }
+    if(p.d.miss > maxP) { p.d.miss <- maxP }
+    return(ACAT(c(p.ptv, p.d.miss)))
+  }
+})
+df$gene.ensembl <- ensId2EnsGene(df$gene, convert)
+df_na_2 <- df
+df <- df[!is.na(df$gene) & (!is.na(df$p.meta) | !is.na(df$p.acat)),]
+write.csv(df, file = "bip.psych.csv", row.names = FALSE, col.names = TRUE, na = "")
+
+# BIP w/ SA
+df <- read.csv("original_csv/bip.sa.csv", header = TRUE, stringsAsFactors = FALSE)
+colnames(df) <- c("gene", "description", "cases", "controls", "cases.ptv", "controls.ptv", "p.ptv", "or.ptv", "cases.d.miss", "controls.d.miss", "p.d.miss", "or.d.miss")
+df$n <- rowSums(df[grepl("^(cases|controls)\\.", colnames(df), perl = TRUE)], na.rm = TRUE)
+df$n[is.na(df$n)] <- 0
+df_na <- df
+df <- df[!(is.na(df$p.d.miss) & is.na(df$p.ptv)),]
+df$p.meta <- apply(df, 1, function(x) { meta.fisher(c(as.numeric(x[7]), as.numeric(x[11]))) })
+minP <- .Machine$double.eps
+maxP <- 1 - minP
+df$p.acat <- apply(df, 1, function(x) {
+  p.ptv <- as.numeric(x[7])
+  p.d.miss <- as.numeric(x[11])
+  if(is.na(p.ptv) & is.na(p.d.miss)) {
+    return(NA)
+  } else if(is.na(p.ptv)) {
+    return(p.d.miss)
+  } else if(is.na(p.d.miss)) {
+    return(p.ptv)
+  } else {
+    if(p.ptv > maxP) { p.ptv <- maxP }
+    if(p.d.miss > maxP) { p.d.miss <- maxP }
+    return(ACAT(c(p.ptv, p.d.miss)))
+  }
+})
+df$gene.ensembl <- ensId2EnsGene(df$gene, convert)
+df_na_2 <- df
+df <- df[!is.na(df$gene) & (!is.na(df$p.meta) | !is.na(df$p.acat)),]
+write.csv(df, file = "bip.sa.csv", row.names = FALSE, col.names = TRUE, na = "")

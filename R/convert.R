@@ -1,0 +1,5 @@
+source("../../rare_pes/R/gsa.R")
+convert <- get_bm_convert()
+convert_gene2EnsGene <- get_convert_gene2EnsGene(convert)
+convert_gene2EnsId <- get_convert_gene2EnsId(convert)
+save.image("convert.RData")
