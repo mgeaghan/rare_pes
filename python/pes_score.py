@@ -25,6 +25,7 @@ def check_args(args=None):
     parser = argparse.ArgumentParser(description="Calculate rare variant PES scores for individuals in multiple pathways.", formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-g', '--genes', help="Gene/pathway data file. Must be a CSV file with a column for gene IDs and a column for every pathway to be scored (0/1 encoded).", required=True)
     parser.add_argument('-c', '--genes_column', help="Column name for gene IDs in --genes file. Default = 'gene_name'.", default="gene_name")
+    parser.add_argument('-S', '--stat_column', help="Column name for the gene z-score in --genes file. Default = 'z'.", default="z")  # NEW
     parser.add_argument('-l', '--loc', help="Gene location data file. Must be a headerless, tab-delimited file, with four columns: chromosome, start position, end position and gene ID (1-based, inclusive). Chromosome codes must match PLINK .bim file for X/Y/MT.", required=True)
     parser.add_argument('-p', '--pathways', help="File containing pathways to be scored. One pathway ID per line. Each ID must match a column header present in the --genes file.", required=True)
     parser.add_argument('-B', '--bfile', help="PLINK file prefix.", required=True)
@@ -133,7 +134,8 @@ def weight_dosages(dosages_df, annotations, weights):
     keep_cols = [c for c in d_cols if c in a_idx]
     return(dosages_df[keep_cols].apply(axis=0, func=lambda x: x * annotations.loc[x.name, weights]))
 
-def get_set_variant_info(variant_list, gene_sets, gene_info, gene_variants, gene_weights):
+# def get_set_variant_info(variant_list, gene_sets, gene_info, gene_variants, gene_weights):
+def get_set_variant_info(variant_list, gene_sets, gene_info, gene_variants, gene_weights, stat_column):
     """Returns a tuple of two dataframes of variants and gene sets; the first with the respective gene weight * Z-score for each pair; the second with just the gene weights for each pair."""
     set_var_z = pd.DataFrame(index=variant_list, columns=list(gene_sets.keys())).fillna(0)
     set_var_w = pd.DataFrame(index=variant_list, columns=list(gene_sets.keys())).fillna(0)
@@ -146,7 +148,8 @@ def get_set_variant_info(variant_list, gene_sets, gene_info, gene_variants, gene
                     if v in variant_list:
                         if v not in seen_variants:
                             # get gene z value
-                            z = gene_info.loc[g, 'z']
+                            # z = gene_info.loc[g, 'z']  # OLD
+                            z = gene_info.loc[g, stat_column]  # NEW
                             # get gene weight
                             w = gene_weights[g]
                             set_var_z.loc[v, s] = z
@@ -156,7 +159,8 @@ def get_set_variant_info(variant_list, gene_sets, gene_info, gene_variants, gene
                         else:
                             # check if new z value is higher or lower than the previous z value - update info if higher
                             z_prev = set_var_z.loc[v, s]
-                            z_new = gene_info.loc[g, 'z']
+                            # z_new = gene_info.loc[g, 'z']  # OLD
+                            z_new = gene_info.loc[g, stat_column]  # NEW
                             if z_new > z_prev:
                                 w_new = gene_weights[g]
                                 set_var_z.loc[v, s] = z_new
@@ -225,7 +229,8 @@ def main(args):
     rel_variants_per_gene_weights = {g: 1 - ((variants_per_gene[g] - min_variants_per_gene)/(1 + (max_variants_per_gene - min_variants_per_gene))) for g in variants_per_gene}
     # For each pathway, get the variants and unique gene for each variant; if a variant overlaps multiple genes, use the higher Z-value, then the higher weight value to select the unique gene
     print("Gathering gene information for each variant in each pathway...")
-    gene_sets_variants_info = get_set_variant_info(var_list, gene_sets, genes, gene_variants, rel_variants_per_gene_weights)
+    # gene_sets_variants_info = get_set_variant_info(var_list, gene_sets, genes, gene_variants, rel_variants_per_gene_weights)  # OLD
+    gene_sets_variants_info = get_set_variant_info(var_list, gene_sets, genes, gene_variants, rel_variants_per_gene_weights, args.stat_column)  # NEW
     # Calculate PES for each pathway for each individual
     print("Calculating PES...")
     # dosages = weight_dosages(get_dosages(newBFile, args.ref_allele), variant_annotations.set_index("var"), "weight")  # OLD
