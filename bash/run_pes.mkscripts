@@ -1,0 +1,36 @@
+disArray=("asc" "bip" "bip.1" "bip.2" "bip.nopsych" "bip.psych" "bip.sa" "dee" "epi" "gge" "nafe" "scz.extada" "scz.leonenko" "scz.schema")
+ensgeneArray=("asc" "dee" "epi" "gge" "nafe" "scz.extada" "scz.leonenko")
+ensidArray=("bip" "bip.1" "bip.2" "bip.nopsych" "bip.psych" "bip.sa" "scz.schema")
+subArray=("all" "1" "0.5" "0.05" "0.005" "bf")
+setArray=("msigdb" "tclin")
+sigArray=("nomsigsets" "sigsets")
+mafArray=("0.01" "0.001")
+
+for DIS in ${disArray[@]}
+do
+	for SUB in ${subArray[@]}
+	do
+		if [ -f "../${DIS}/${DIS}.${SUB}.gsa.msigdb.genes.txt" ]
+		then
+			for SET in ${setArray[@]}
+			do
+				for SIG in ${sigArray[@]}
+				do
+					for MAF in ${mafArray[@]}
+					do
+						cat run_pes.sh | sed -e "s/DISORDER/${DIS}/g" -e "s/SUBSET/${SUB}/g" -e "s/GENESETS/${SET}/g" -e "s/SIGSETS/${SIG}/g" -e "s/MAF/${MAF}/g" > run_pes.${DIS}.${SUB}.${SET}.${SIG}.${MAF}.sh
+					done
+				done
+			done
+		fi
+	done
+done
+for DIS in ${ensidArray[@]}
+do
+	sed -i -e "s/GENERANGES/gene.ranges.auto.ensembl.txt/g" -e "s/GENEHEADER/gene/g" run_pes.${DIS}.*.sh
+done
+for DIS in ${ensgeneArray[@]}
+do
+	sed -i -e "s/GENERANGES/gene.ranges.auto.txt/g" -e "s/GENEHEADER/gene.ensembl/g" run_pes.${DIS}.*.sh
+done
+

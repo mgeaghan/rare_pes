@@ -25,7 +25,7 @@ def check_args(args=None):
     parser = argparse.ArgumentParser(description="Calculate rare variant PES scores for individuals in multiple pathways.", formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-g', '--genes', help="Gene/pathway data file. Must be a CSV file with a column for gene IDs and a column for every pathway to be scored (0/1 encoded).", required=True)
     parser.add_argument('-c', '--genes_column', help="Column name for gene IDs in --genes file. Default = 'gene_name'.", default="gene_name")
-    parser.add_argument('-l', '--loc', help="Gene location data file. Must be a headerless, tab-delimited file, with four columns: gene ID, chromosome, start position and end position (1-based, inclusive). Chromosome codes must match PLINK .bim file for X/Y/MT.", required=True)
+    parser.add_argument('-l', '--loc', help="Gene location data file. Must be a headerless, tab-delimited file, with four columns: chromosome, start position, end position and gene ID (1-based, inclusive). Chromosome codes must match PLINK .bim file for X/Y/MT.", required=True)
     parser.add_argument('-p', '--pathways', help="File containing pathways to be scored. One pathway ID per line. Each ID must match a column header present in the --genes file.", required=True)
     parser.add_argument('-B', '--bfile', help="PLINK file prefix.", required=True)
     parser.add_argument('-r', '--ref_allele', help="Reference allele in PLINK data. Must be either '1' or '2', corresponding to the A1 or A2 allele in the PLINK .bim file, i.e. PLINK data must be calculated relative to the reference genome.", required=True)
@@ -137,6 +137,7 @@ def get_set_variant_info(variant_list, gene_sets, gene_info, gene_variants, gene
     """Returns a tuple of two dataframes of variants and gene sets; the first with the respective gene weight * Z-score for each pair; the second with just the gene weights for each pair."""
     set_var_z = pd.DataFrame(index=variant_list, columns=list(gene_sets.keys())).fillna(0)
     set_var_w = pd.DataFrame(index=variant_list, columns=list(gene_sets.keys())).fillna(0)
+    set_var_m = pd.DataFrame(index=variant_list, columns=list(gene_sets.keys())).fillna(0)  # NEW
     for s in gene_sets:
         seen_variants = []
         for g in gene_sets[s]:
@@ -150,6 +151,7 @@ def get_set_variant_info(variant_list, gene_sets, gene_info, gene_variants, gene
                             w = gene_weights[g]
                             set_var_z.loc[v, s] = z
                             set_var_w.loc[v, s] = w
+                            set_var_m.loc[v, s] = 1  # NEW
                             seen_variants.append(v)
                         else:
                             # check if new z value is higher or lower than the previous z value - update info if higher
@@ -173,13 +175,15 @@ def get_set_variant_info(variant_list, gene_sets, gene_info, gene_variants, gene
                         continue
             else:
                 continue
-    return((set_var_z * set_var_w, set_var_w))
+    # return((set_var_z * set_var_w, set_var_w))  # OLD
+    return((set_var_z * set_var_w, set_var_w, set_var_m))  # NEW
 
 def main(args):
     """Main function."""
     # Intersect variants and genes using PLINK
     print("Intersecting variants and genes in PLINK...")
-    newBFile = args.bfile + ".pes_score.subset"
+    # newBFile = args.bfile + ".pes_score.subset"  # OLD
+    newBFile = args.output + "tmp.pes_score.subset"  # NEW
     setsFile = plink_sets(args.bfile, args.loc, newBFile)
     gene_variants = parse_sets(setsFile)
     # Import gene and pathway data file
@@ -224,12 +228,17 @@ def main(args):
     gene_sets_variants_info = get_set_variant_info(var_list, gene_sets, genes, gene_variants, rel_variants_per_gene_weights)
     # Calculate PES for each pathway for each individual
     print("Calculating PES...")
-    dosages = weight_dosages(get_dosages(newBFile, args.ref_allele), variant_annotations.set_index("var"), "weight")
-    pes = dosages.dot(gene_sets_variants_info[0])/np.sqrt((dosages**2).dot(gene_sets_variants_info[1]**2))
+    # dosages = weight_dosages(get_dosages(newBFile, args.ref_allele), variant_annotations.set_index("var"), "weight")  # OLD
+    dosages = get_dosages(newBFile, args.ref_allele)
+    w_dosages = weight_dosages(dosages, variant_annotations.set_index("var"), "weight")
+    pes = w_dosages.dot(gene_sets_variants_info[0])/np.sqrt((w_dosages**2).dot(gene_sets_variants_info[1]**2))
+    setDosages = (2*dosages).astype('int32').dot(gene_sets_variants_info[2])  # NEW
     # write to file
     print("Writing to output...")
     output_file = args.output + ".pes.txt"
     pes.to_csv(output_file)
+    output_file = args.output + ".set.dosages.txt"  # NEW
+    setDosages.to_csv(output_file)  # NEW
     print("DONE!")
 
 if __name__ == "__main__":

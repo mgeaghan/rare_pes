@@ -1,3 +1,6 @@
+# clean exome sequencing gene-level summary statistics for SCZ, ASD, EPI, and BIP
+# Author: Michael Geaghan
+# Date: August 2020
 source("../../rare_pes/R/gsa.R")
 convert <- get_bm_convert()
 meta.fisher <- function(x) {
@@ -33,7 +36,9 @@ df <- rbind(df[!(df$gene.ensembl %in% dfDupNames),],
             dfDups)
 df_na_2 <- df
 df <- df[!is.na(df$gene.ensembl) & !is.na(df$p.skat.o),]
-write.csv(df, file = "scz.leonenko.csv", row.names = FALSE, col.names = TRUE, na = "")
+df$p.skat.o[df$p.skat.o==1] <- (1 - .Machine$double.eps)
+df$p.burden[df$p.burden==1] <- (1 - .Machine$double.eps)
+write.csv(df, file = "scz.leonenko.csv", row.names = FALSE, na = "")
 
 # SCZ exTADA
 df <- read.csv("original_csv/scz.extada.csv", header = TRUE, stringsAsFactors = FALSE)
@@ -72,7 +77,8 @@ df <- rbind(df[!(df$gene.ensembl %in% dfDupNames),],
             dfDups)
 df_na_2 <- df
 df <- df[!is.na(df$gene.ensembl) & !is.na(df$p),]
-write.csv(df, file = "scz.extada.csv", row.names = FALSE, col.names = TRUE, na = "")
+df$p[df$p==1] <- (1 - .Machine$double.eps)
+write.csv(df, file = "scz.extada.csv", row.names = FALSE, na = "")
 
 # ASC
 df <- read.csv("original_csv/asc.csv", header = TRUE, stringsAsFactors = FALSE)
@@ -120,7 +126,12 @@ df <- rbind(df[!(df$gene.ensembl %in% dfDupNames),],
             dfDups)
 df_na_2 <- df
 df <- df[!is.na(df$gene.ensembl) & !is.na(df$p),]
-write.csv(df, file = "asc.csv", row.names = FALSE, col.names = TRUE, na = "")
+df_1 <- df
+df_no1 <- df
+df_1$p[df_1$p==1] <- (1 - .Machine$double.eps)
+df_no1 <- df_no1[df_no1$p != 1,]
+write.csv(df_1, file = "asc.csv", row.names = FALSE, na = "")
+write.csv(df_no1, file = "asc.no1.csv", row.names = FALSE, na = "")
 
 # EPI: DEE
 df <- read.csv("original_csv/dee.csv", header = TRUE, stringsAsFactors = FALSE)
@@ -157,7 +168,12 @@ df <- rbind(df[!(df$gene.ensembl %in% dfDupNames),],
             dfDups)
 df_na_2 <- df
 df <- df[!is.na(df$gene.ensembl) & !is.na(df$p),]
-write.csv(df, file = "dee.csv", row.names = FALSE, col.names = TRUE, na = "")
+df_1 <- df
+df_no1 <- df
+df_1$p[df_1$p==1] <- (1 - .Machine$double.eps)
+df_no1 <- df_no1[df_no1$p != 1,]
+write.csv(df_1, file = "dee.csv", row.names = FALSE, na = "")
+write.csv(df_no1, file = "dee.no1.csv", row.names = FALSE, na = "")
 
 # EPI: EPI
 df <- read.csv("original_csv/epi.csv", header = TRUE, stringsAsFactors = FALSE)
@@ -194,7 +210,12 @@ df <- rbind(df[!(df$gene.ensembl %in% dfDupNames),],
             dfDups)
 df_na_2 <- df
 df <- df[!is.na(df$gene.ensembl) & !is.na(df$p),]
-write.csv(df, file = "epi.csv", row.names = FALSE, col.names = TRUE, na = "")
+df_1 <- df
+df_no1 <- df
+df_1$p[df_1$p==1] <- (1 - .Machine$double.eps)
+df_no1 <- df_no1[df_no1$p != 1,]
+write.csv(df_1, file = "epi.csv", row.names = FALSE, na = "")
+write.csv(df_no1, file = "epi.no1.csv", row.names = FALSE, na = "")
 
 # EPI: GGE
 df <- read.csv("original_csv/gge.csv", header = TRUE, stringsAsFactors = FALSE)
@@ -231,7 +252,12 @@ df <- rbind(df[!(df$gene.ensembl %in% dfDupNames),],
             dfDups)
 df_na_2 <- df
 df <- df[!is.na(df$gene.ensembl) & !is.na(df$p),]
-write.csv(df, file = "gge.csv", row.names = FALSE, col.names = TRUE, na = "")
+df_1 <- df
+df_no1 <- df
+df_1$p[df_1$p==1] <- (1 - .Machine$double.eps)
+df_no1 <- df_no1[df_no1$p != 1,]
+write.csv(df_1, file = "gge.csv", row.names = FALSE, na = "")
+write.csv(df_no1, file = "gge.no1.csv", row.names = FALSE, na = "")
 
 # EPI: NAFE
 df <- read.csv("original_csv/nafe.csv", header = TRUE, stringsAsFactors = FALSE)
@@ -268,7 +294,12 @@ df <- rbind(df[!(df$gene.ensembl %in% dfDupNames),],
             dfDups)
 df_na_2 <- df
 df <- df[!is.na(df$gene.ensembl) & !is.na(df$p),]
-write.csv(df, file = "nafe.csv", row.names = FALSE, col.names = TRUE, na = "")
+df_1 <- df
+df_no1 <- df
+df_1$p[df_1$p==1] <- (1 - .Machine$double.eps)
+df_no1 <- df_no1[df_no1$p != 1,]
+write.csv(df_1, file = "nafe.csv", row.names = FALSE, na = "")
+write.csv(df_no1, file = "nafe.no1.csv", row.names = FALSE, na = "")
 
 # SCZ SCHEMA
 df <- read.csv("original_csv/scz.schema.csv", header = TRUE, stringsAsFactors = FALSE)
@@ -277,7 +308,12 @@ df$n <- rowSums(df[c("case.lof", "control.lof", "case.miss.gte.3", "control.miss
 df$gene.ensembl <- ensId2EnsGene(df$gene, convert)
 df_na <- df
 df <- df[!is.na(df$gene) & !is.na(df$p.meta),]
-write.csv(df, file = "scz.schema.csv", row.names = FALSE, col.names = TRUE, na = "")
+df_1 <- df
+df_no1 <- df
+df_1$p.meta[df_1$p.meta==1] <- (1 - .Machine$double.eps)
+df_no1 <- df_no1[df_no1$p.meta != 1,]
+write.csv(df_1, file = "scz.schema.csv", row.names = FALSE, na = "")
+write.csv(df_no1, file = "scz.schema.no1.csv", row.names = FALSE, na = "")
 
 # BIP
 df <- read.csv("original_csv/bip.csv", header = TRUE, stringsAsFactors = FALSE)
@@ -287,8 +323,8 @@ df$n[is.na(df$n)] <- 0
 df_na <- df
 df <- df[!(is.na(df$p.d.miss) & is.na(df$p.ptv)),]
 df$p.meta <- apply(df, 1, function(x) { meta.fisher(c(as.numeric(x[7]), as.numeric(x[11]))) })
-minP <- .Machine$double.eps
-maxP <- 1 - minP
+minP <- .Machine$double.xmin
+maxP <- 1 - .Machine$double.eps
 df$p.acat <- apply(df, 1, function(x) {
   p.ptv <- as.numeric(x[7])
   p.d.miss <- as.numeric(x[11])
@@ -307,7 +343,16 @@ df$p.acat <- apply(df, 1, function(x) {
 df$gene.ensembl <- ensId2EnsGene(df$gene, convert)
 df_na_2 <- df
 df <- df[!is.na(df$gene) & (!is.na(df$p.meta) | !is.na(df$p.acat)),]
-write.csv(df, file = "bip.csv", row.names = FALSE, col.names = TRUE, na = "")
+df_1 <- df
+df_no1meta <- df
+df_no1acat <- df
+df_1$p.meta[df_1$p.meta==1] <- (1 - .Machine$double.eps)
+df_1$p.acat[df_1$p.acat==1] <- (1 - .Machine$double.eps)
+df_no1meta <- df_no1meta[df_no1meta$p.meta != 1,]
+df_no1acat <- df_no1acat[df_no1acat$p.acat != 1,]
+write.csv(df_1, file = "bip.csv", row.names = FALSE, na = "")
+write.csv(df_no1meta, file = "bip.no1meta.csv", row.names = FALSE, na = "")
+write.csv(df_no1acat, file = "bip.no1acat.csv", row.names = FALSE, na = "")
 
 # BIP1
 df <- read.csv("original_csv/bip.1.csv", header = TRUE, stringsAsFactors = FALSE)
@@ -317,8 +362,8 @@ df$n[is.na(df$n)] <- 0
 df_na <- df
 df <- df[!(is.na(df$p.d.miss) & is.na(df$p.ptv)),]
 df$p.meta <- apply(df, 1, function(x) { meta.fisher(c(as.numeric(x[7]), as.numeric(x[11]))) })
-minP <- .Machine$double.eps
-maxP <- 1 - minP
+minP <- .Machine$double.xmin
+maxP <- 1 - .Machine$double.eps
 df$p.acat <- apply(df, 1, function(x) {
   p.ptv <- as.numeric(x[7])
   p.d.miss <- as.numeric(x[11])
@@ -337,7 +382,16 @@ df$p.acat <- apply(df, 1, function(x) {
 df$gene.ensembl <- ensId2EnsGene(df$gene, convert)
 df_na_2 <- df
 df <- df[!is.na(df$gene) & (!is.na(df$p.meta) | !is.na(df$p.acat)),]
-write.csv(df, file = "bip.1.csv", row.names = FALSE, col.names = TRUE, na = "")
+df_1 <- df
+df_no1meta <- df
+df_no1acat <- df
+df_1$p.meta[df_1$p.meta==1] <- (1 - .Machine$double.eps)
+df_1$p.acat[df_1$p.acat==1] <- (1 - .Machine$double.eps)
+df_no1meta <- df_no1meta[df_no1meta$p.meta != 1,]
+df_no1acat <- df_no1acat[df_no1acat$p.acat != 1,]
+write.csv(df_1, file = "bip.1.csv", row.names = FALSE, na = "")
+write.csv(df_no1meta, file = "bip.1.no1meta.csv", row.names = FALSE, na = "")
+write.csv(df_no1acat, file = "bip.1.no1acat.csv", row.names = FALSE, na = "")
 
 # BIP2
 df <- read.csv("original_csv/bip.2.csv", header = TRUE, stringsAsFactors = FALSE)
@@ -347,8 +401,8 @@ df$n[is.na(df$n)] <- 0
 df_na <- df
 df <- df[!(is.na(df$p.d.miss) & is.na(df$p.ptv)),]
 df$p.meta <- apply(df, 1, function(x) { meta.fisher(c(as.numeric(x[7]), as.numeric(x[11]))) })
-minP <- .Machine$double.eps
-maxP <- 1 - minP
+minP <- .Machine$double.xmin
+maxP <- 1 - .Machine$double.eps
 df$p.acat <- apply(df, 1, function(x) {
   p.ptv <- as.numeric(x[7])
   p.d.miss <- as.numeric(x[11])
@@ -367,7 +421,16 @@ df$p.acat <- apply(df, 1, function(x) {
 df$gene.ensembl <- ensId2EnsGene(df$gene, convert)
 df_na_2 <- df
 df <- df[!is.na(df$gene) & (!is.na(df$p.meta) | !is.na(df$p.acat)),]
-write.csv(df, file = "bip.2.csv", row.names = FALSE, col.names = TRUE, na = "")
+df_1 <- df
+df_no1meta <- df
+df_no1acat <- df
+df_1$p.meta[df_1$p.meta==1] <- (1 - .Machine$double.eps)
+df_1$p.acat[df_1$p.acat==1] <- (1 - .Machine$double.eps)
+df_no1meta <- df_no1meta[df_no1meta$p.meta != 1,]
+df_no1acat <- df_no1acat[df_no1acat$p.acat != 1,]
+write.csv(df_1, file = "bip.2.csv", row.names = FALSE, na = "")
+write.csv(df_no1meta, file = "bip.2.no1meta.csv", row.names = FALSE, na = "")
+write.csv(df_no1acat, file = "bip.2.no1acat.csv", row.names = FALSE, na = "")
 
 # BIP No Psych
 df <- read.csv("original_csv/bip.nopsych.csv", header = TRUE, stringsAsFactors = FALSE)
@@ -377,8 +440,8 @@ df$n[is.na(df$n)] <- 0
 df_na <- df
 df <- df[!(is.na(df$p.d.miss) & is.na(df$p.ptv)),]
 df$p.meta <- apply(df, 1, function(x) { meta.fisher(c(as.numeric(x[7]), as.numeric(x[11]))) })
-minP <- .Machine$double.eps
-maxP <- 1 - minP
+minP <- .Machine$double.xmin
+maxP <- 1 - .Machine$double.eps
 df$p.acat <- apply(df, 1, function(x) {
   p.ptv <- as.numeric(x[7])
   p.d.miss <- as.numeric(x[11])
@@ -397,7 +460,16 @@ df$p.acat <- apply(df, 1, function(x) {
 df$gene.ensembl <- ensId2EnsGene(df$gene, convert)
 df_na_2 <- df
 df <- df[!is.na(df$gene) & (!is.na(df$p.meta) | !is.na(df$p.acat)),]
-write.csv(df, file = "bip.nopsych.csv", row.names = FALSE, col.names = TRUE, na = "")
+df_1 <- df
+df_no1meta <- df
+df_no1acat <- df
+df_1$p.meta[df_1$p.meta==1] <- (1 - .Machine$double.eps)
+df_1$p.acat[df_1$p.acat==1] <- (1 - .Machine$double.eps)
+df_no1meta <- df_no1meta[df_no1meta$p.meta != 1,]
+df_no1acat <- df_no1acat[df_no1acat$p.acat != 1,]
+write.csv(df_1, file = "bip.nopsych.csv", row.names = FALSE, na = "")
+write.csv(df_no1meta, file = "bip.nopsych.no1meta.csv", row.names = FALSE, na = "")
+write.csv(df_no1acat, file = "bip.nopsych.no1acat.csv", row.names = FALSE, na = "")
 
 # BIP Psych
 df <- read.csv("original_csv/bip.psych.csv", header = TRUE, stringsAsFactors = FALSE)
@@ -407,8 +479,8 @@ df$n[is.na(df$n)] <- 0
 df_na <- df
 df <- df[!(is.na(df$p.d.miss) & is.na(df$p.ptv)),]
 df$p.meta <- apply(df, 1, function(x) { meta.fisher(c(as.numeric(x[7]), as.numeric(x[11]))) })
-minP <- .Machine$double.eps
-maxP <- 1 - minP
+minP <- .Machine$double.xmin
+maxP <- 1 - .Machine$double.eps
 df$p.acat <- apply(df, 1, function(x) {
   p.ptv <- as.numeric(x[7])
   p.d.miss <- as.numeric(x[11])
@@ -427,7 +499,16 @@ df$p.acat <- apply(df, 1, function(x) {
 df$gene.ensembl <- ensId2EnsGene(df$gene, convert)
 df_na_2 <- df
 df <- df[!is.na(df$gene) & (!is.na(df$p.meta) | !is.na(df$p.acat)),]
-write.csv(df, file = "bip.psych.csv", row.names = FALSE, col.names = TRUE, na = "")
+df_1 <- df
+df_no1meta <- df
+df_no1acat <- df
+df_1$p.meta[df_1$p.meta==1] <- (1 - .Machine$double.eps)
+df_1$p.acat[df_1$p.acat==1] <- (1 - .Machine$double.eps)
+df_no1meta <- df_no1meta[df_no1meta$p.meta != 1,]
+df_no1acat <- df_no1acat[df_no1acat$p.acat != 1,]
+write.csv(df_1, file = "bip.psych.csv", row.names = FALSE, na = "")
+write.csv(df_no1meta, file = "bip.psych.no1meta.csv", row.names = FALSE, na = "")
+write.csv(df_no1acat, file = "bip.psych.no1acat.csv", row.names = FALSE, na = "")
 
 # BIP w/ SA
 df <- read.csv("original_csv/bip.sa.csv", header = TRUE, stringsAsFactors = FALSE)
@@ -437,8 +518,8 @@ df$n[is.na(df$n)] <- 0
 df_na <- df
 df <- df[!(is.na(df$p.d.miss) & is.na(df$p.ptv)),]
 df$p.meta <- apply(df, 1, function(x) { meta.fisher(c(as.numeric(x[7]), as.numeric(x[11]))) })
-minP <- .Machine$double.eps
-maxP <- 1 - minP
+minP <- .Machine$double.xmin
+maxP <- 1 - .Machine$double.eps
 df$p.acat <- apply(df, 1, function(x) {
   p.ptv <- as.numeric(x[7])
   p.d.miss <- as.numeric(x[11])
@@ -457,4 +538,13 @@ df$p.acat <- apply(df, 1, function(x) {
 df$gene.ensembl <- ensId2EnsGene(df$gene, convert)
 df_na_2 <- df
 df <- df[!is.na(df$gene) & (!is.na(df$p.meta) | !is.na(df$p.acat)),]
-write.csv(df, file = "bip.sa.csv", row.names = FALSE, col.names = TRUE, na = "")
+df_1 <- df
+df_no1meta <- df
+df_no1acat <- df
+df_1$p.meta[df_1$p.meta==1] <- (1 - .Machine$double.eps)
+df_1$p.acat[df_1$p.acat==1] <- (1 - .Machine$double.eps)
+df_no1meta <- df_no1meta[df_no1meta$p.meta != 1,]
+df_no1acat <- df_no1acat[df_no1acat$p.acat != 1,]
+write.csv(df_1, file = "bip.sa.csv", row.names = FALSE, na = "")
+write.csv(df_no1meta, file = "bip.sa.no1meta.csv", row.names = FALSE, na = "")
+write.csv(df_no1acat, file = "bip.sa.no1acat.csv", row.names = FALSE, na = "")

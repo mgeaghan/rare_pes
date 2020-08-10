@@ -1,7 +1,7 @@
 getFinitePs <- function(x) {
-	# convert P = 0 --> machine epsilon; P = 1 --> 1 - machine epsilon
-	minP <- .Machine$double.eps
-	maxP <- 1 - minP
+	# convert P = 0 --> machine minimum positive double; P = 1 --> 1 - machine epsilon
+	minP <- .Machine$double.xmin
+	maxP <- 1 - .Machine$double.eps
 	p.finite <- x
 	p.finite[p.finite < minP] <- minP
 	p.finite[p.finite > maxP] <- maxP
@@ -41,8 +41,11 @@ addGeneSets <- function(df, geneSets, geneHeader = "gene.ensembl") {
   return(newDf)
 }
 
-runGeneSetLogit <- function(df, geneSets, gene = "gene", stat = "z", covars) {
-	# given a data frame with a column of gene names, summary statistic 'stat' and covariates supplied in vector 'covars', perform gene set analysis using a logistic regression model
+runGeneSetLogit <- function(df, geneSets, gene = "gene", stat = "z", covars = NULL) {
+  if (length(covars) == 1 && is.na(covars)) {
+    stop("Argument to covars cannot be NA; for no covariates, supply covars = NULL")
+  }
+  # given a data frame with a column of gene names, summary statistic 'stat' and covariates supplied in vector 'covars', perform gene set analysis using a logistic regression model
 	if (FALSE %in% (c(gene, stat, covars) %in% colnames(df))) {
 		stop("Dataframe is missing covariate columns.")
 	}
@@ -53,13 +56,20 @@ runGeneSetLogit <- function(df, geneSets, gene = "gene", stat = "z", covars) {
 		newDf[[s]] <- as.numeric(newDf[[gene]] %in% as.character(geneSets[s,]))
 		tmp <- newDf[c(stat, s, covars)]
 		colnames(tmp) <- c("stat", "set", covars)
-		fmla <- as.formula(paste("set ~ stat +", paste(covars, collapse = " + ")))
+		if (is.null(covars)) {
+		  fmla <- as.formula(paste("stat ~ set"))
+		} else {
+		  fmla <- as.formula(paste("stat ~ set +", paste(covars, collapse = " + ")))
+		}
 		logMods[[s]] <- glm(fmla, data = tmp, family = "binomial")
 	}
 	return(logMods)
 }
 
-runGeneSetLM <- function(df, geneSets, gene = "gene", stat = "z", covars) {
+runGeneSetLM <- function(df, geneSets, gene = "gene", stat = "z", covars = NULL) {
+  if (length(covars) == 1 && is.na(covars)) {
+    stop("Argument to covars cannot be NA; for no covariates, supply covars = NULL")
+  }
 	# given a data frame with a column of gene names, summary statistic 'stat' and covariates supplied in vector 'covars', perform gene set analysis using a linear regression model
 	if (FALSE %in% (c(gene, stat, covars) %in% colnames(df))) {
 		stop("Dataframe is missing covariate columns.")
@@ -71,7 +81,11 @@ runGeneSetLM <- function(df, geneSets, gene = "gene", stat = "z", covars) {
 		newDf[[s]] <- as.numeric(newDf[[gene]] %in% as.character(geneSets[s,]))
 		tmp <- newDf[c(stat, s, covars)]
 		colnames(tmp) <- c("stat", "set", covars)
-		fmla <- as.formula(paste("stat ~ set +", paste(covars, collapse = " + ")))
+		if (is.null(covars)) {
+		  fmla <- as.formula(paste("stat ~ set"))
+		} else {
+		  fmla <- as.formula(paste("stat ~ set +", paste(covars, collapse = " + ")))
+		}
 		linMods[[s]] <- lm(fmla, data = tmp)
 	}
 	return(linMods)
@@ -103,15 +117,33 @@ getLMStats <- function(linMods) {
 	for (s in names(linMods)) {
 		coefs <- summary(linMods[[s]])$coefficients
 		if ("set" %in% rownames(coefs)) {
-			linModStats[[s]] <- data.frame(set = s, p = summary(linMods[[s]])$coefficients["set", "Pr(>|t|)"])
+			set.p <- coefs["set", "Pr(>|t|)"]
+			set.beta <- coefs["set", "Estimate"]
+			set.se <- coefs["set", "Std. Error"]
+			set.t <- coefs["set", "t value"]
 		} else {
-			linModStats[[s]] <- data.frame(set = s, p = NA)
+			set.p <- NA
+			set.beta <- NA
+			set.se <- NA
+		  set.t <- NA
 		}
+		log.n.p <- coefs["log.n", "Pr(>|t|)"]
+		log.n.beta <- coefs["log.n", "Estimate"]
+		log.n.se <- coefs["log.n", "Std. Error"]
+		log.n.t <- coefs["log.n", "t value"]
+		log.len.p <- coefs["log.len", "Pr(>|t|)"]
+		log.len.beta <- coefs["log.len", "Estimate"]
+		log.len.se <- coefs["log.len", "Std. Error"]
+		log.len.t <- coefs["log.len", "t value"]
+		r2 <- summary(linMods[[s]])$adj.r.squared
+		linModStats[[s]] <- data.frame(set = s, set.p = set.p, set.beta = set.beta, set.se = set.se, set.t = set.t,
+		                               log.n.p = log.n.p, log.n.beta = log.n.beta, log.n.se = log.n.se, log.n.t = log.n.t,
+		                               log.len.p = log.len.p, log.len.beta = log.len.beta, log.len.se = log.len.se, log.len.t = log.len.t)
 	}
 	linModStats <- as.data.frame(do.call(rbind, linModStats))
-	colnames(linModStats) <- c("set", "p")
-	linModStats$p.adj <- p.adjust(linModStats$p, method = "BH")
-	linModStats$n <- sapply(rownames(linModStats), function(x) {
+	# colnames(linModStats) <- c("set", "p")
+	linModStats$set.p.adj <- p.adjust(linModStats$set.p, method = "BH")
+	linModStats$set.n <- sapply(rownames(linModStats), function(x) {
 		return(table(linMods[[x]]$model$set)[2])
 	})
 	return(linModStats)
@@ -248,40 +280,70 @@ geneset2EnsGene <- function(x, convertDf) {
   return(newDf)
 }
 
-runDefaultGSA <- function(inputFile, geneHeader, pHeader, outPrefix) {
-  # # read in gene-level results from study
-  # df <- read.csv(inputFile, header = TRUE)
-  # rownames(df) <- df[[geneHeader]]
-  # # remove genes with n (minor allele count) == 0
-  # df <- df[df$n > 0,]
-  # 
-  # df$p.finite <- getFinitePs(df[[pHeader]])
-  # df$z <- zTransformPValue(df$p.finite)
-  # df$len <- getGeneLengths(rownames(df), "../db/len.txt")
-  # df <- df[!is.na(df$len),]
-  # df$log.n <- log(df$n)
-  # df$log.len <- log(df$len)
-  # geneSetMsigdb <- getGeneSets("../db/gene_sets/MsigDB_canonical_and_hallmark_Tclin_v_6.1.0.gmt")
-  # linModsMsigdb <- runGeneSetLM(df, geneSetMsigdb, gene = "gene.ensembl", covars = c("log.n", "log.len"))
-  # linModStatsMsigdb <- getLMStats(linModsMsigdb)
-  # geneSetTclin <- getGeneSets("../db/gene_sets/Tclin_enriched_MsigDB_hallmark_canonical_TCRD_v.6.1.0.gmt")
-  # linModsTclin <- runGeneSetLM(df, geneSetTclin, gene = "gene.ensembl", covars = c("log.n", "log.len"))
-  # linModStatsTclin <- getLMStats(linModsTclin)
-  # 
-  # msigdbPrefix <- paste(outPrefix, "gsa.msigdb", sep = ".")
-  # tclinPrefix <- paste(outPrefix, "gsa.msigdb", sep = ".")
-  # 
-  # write.table(linModStatsMsigdb, paste(msigdbPrefix, ".txt", sep = ""), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
-  # write.table(linModStatsTclin, paste(tclinPrefix, ".txt", sep = ""), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
-  # write.table(linModStatsMsigdb$set[linModStatsMsigdb$p < 0.05], paste(msigdbPrefix, ".sigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
-  # write.table(linModStatsTclin$set[linModStatsTclin$p < 0.05], paste(tclinPrefix, ".sigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
-  # 
-  # dfMsigdb <- addGeneSets(df, geneSetMsigdb)
-  # dfTclin <- addGeneSets(df, geneSetTclin)
-  # 
-  # write.csv(dfMsigdb, paste(msigdbPrefix, ".genes.txt", sep = ""), quote = FALSE, row.names = FALSE)
-  # write.csv(dfTclin, paste(tclinPrefix, ".genes.txt", sep = ""), quote = FALSE, row.names = FALSE)
-  # 
-  # # save(df, linModsMsigdb, linModStatsTclin, linModStatsMsigdb, linModStatsTclin, dfMsigdb, dfTclin, file = paste(outPrefix, ".gsa.RData", sep = ""))
-  # 
+runGSA <- function(inputFile, lengthFile, geneHeader, pHeader, nHeader, covars, outPrefix, pThreshold = NA, alpha = 0.05) {
+  # read in gene-level results from study
+  df <- read.csv(inputFile, header = TRUE)
+  rownames(df) <- df[[geneHeader]]
+  # remove genes with n (minor allele count) == 0
+  df <- df[df[[nHeader]] > 0,]
+  
+  # apply pvalue threshold if present
+  if (!is.na(pThreshold)) {
+    df <- df[df[[pHeader]] < pThreshold,]
+  }
+  
+  df$p.finite <- getFinitePs(df[[pHeader]])
+  df$z <- zTransformPValue(df$p.finite)
+  df$len <- getGeneLengths(rownames(df), lengthFile)
+  df <- df[!is.na(df$len),]
+  df$log.n <- log(df[[nHeader]])
+  df$log.len <- log(df$len)
+  linModsMsigdb <- runGeneSetLM(df, geneSetMsigdbEns, gene = geneHeader, covars = covars)
+  linModStatsMsigdb <- getLMStats(linModsMsigdb)
+  linModsTclin <- runGeneSetLM(df, geneSetTclinEns, gene = geneHeader, covars = covars)
+  linModStatsTclin <- getLMStats(linModsTclin)
+  
+  msigdbPrefix <- paste(outPrefix, "gsa.msigdb", sep = ".")
+  tclinPrefix <- paste(outPrefix, "gsa.tclin", sep = ".")
+  
+  write.table(linModStatsMsigdb, paste(msigdbPrefix, ".txt", sep = ""), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+  write.table(linModStatsTclin, paste(tclinPrefix, ".txt", sep = ""), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+  write.table(linModStatsMsigdb$set[!is.na(linModStatsMsigdb$set.p) & linModStatsMsigdb$set.p < alpha], paste(msigdbPrefix, ".nomsigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+  write.table(linModStatsTclin$set[!is.na(linModStatsTclin$set.p) & linModStatsTclin$set.p < alpha], paste(tclinPrefix, ".nomsigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+  write.table(linModStatsMsigdb$set[!is.na(linModStatsMsigdb$set.p.adj) & linModStatsMsigdb$set.p.adj < alpha], paste(msigdbPrefix, ".sigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+  write.table(linModStatsTclin$set[!is.na(linModStatsTclin$set.p.adj) & linModStatsTclin$set.p.adj < alpha], paste(tclinPrefix, ".sigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+  
+  dfMsigdb <- addGeneSets(df, geneSetMsigdbEns, geneHeader)
+  dfTclin <- addGeneSets(df, geneSetTclinEns, geneHeader)
+  
+  write.csv(dfMsigdb, paste(msigdbPrefix, ".genes.txt", sep = ""), row.names = FALSE)
+  write.csv(dfTclin, paste(tclinPrefix, ".genes.txt", sep = ""), row.names = FALSE)
+}
+
+runBfGSA <- function(df, lengthFile, geneHeader, bfHeader, nHeader, covars, outPrefix, alpha = 0.05) {
+  df$log.bf <- log(df[[bfHeader]])
+  df$len <- getGeneLengths(rownames(df), lengthFile)
+  df <- df[!is.na(df$len),]
+  df$log.n <- log(df[[nHeader]])
+  df$log.len <- log(df$len)
+  linModsMsigdb <- runGeneSetLM(df, geneSetMsigdbEns, gene = geneHeader, stat = "log.bf", covars = covars)
+  linModStatsMsigdb <- getLMStats(linModsMsigdb)
+  linModsTclin <- runGeneSetLM(df, geneSetTclinEns, gene = geneHeader, stat = "log.bf", covars = covars)
+  linModStatsTclin <- getLMStats(linModsTclin)
+  
+  msigdbPrefix <- paste(outPrefix, "gsa.msigdb", sep = ".")
+  tclinPrefix <- paste(outPrefix, "gsa.tclin", sep = ".")
+  
+  write.table(linModStatsMsigdb, paste(msigdbPrefix, ".txt", sep = ""), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+  write.table(linModStatsTclin, paste(tclinPrefix, ".txt", sep = ""), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+  write.table(linModStatsMsigdb$set[!is.na(linModStatsMsigdb$set.p) & linModStatsMsigdb$set.p < alpha], paste(msigdbPrefix, ".nomsigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+  write.table(linModStatsTclin$set[!is.na(linModStatsTclin$set.p) & linModStatsTclin$set.p < alpha], paste(tclinPrefix, ".nomsigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+  write.table(linModStatsMsigdb$set[!is.na(linModStatsMsigdb$set.p.adj) & linModStatsMsigdb$set.p.adj < alpha], paste(msigdbPrefix, ".sigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+  write.table(linModStatsTclin$set[!is.na(linModStatsTclin$set.p.adj) & linModStatsTclin$set.p.adj < alpha], paste(tclinPrefix, ".sigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+  
+  dfMsigdb <- addGeneSets(df, geneSetMsigdbEns, geneHeader)
+  dfTclin <- addGeneSets(df, geneSetTclinEns, geneHeader)
+  
+  write.csv(dfMsigdb, paste(msigdbPrefix, ".genes.txt", sep = ""), row.names = FALSE)
+  write.csv(dfTclin, paste(tclinPrefix, ".genes.txt", sep = ""), row.names = FALSE)
 }
