@@ -321,17 +321,17 @@ runGSA <- function(inputFile, lengthFile, geneHeader, pHeader, nHeader, covars, 
 }
 
 runBfGSA <- function(df, lengthFile, geneHeader, bfHeader, nHeader, covars, outPrefix, alpha = 0.05) {
-  # df$log.bf <- log(df[[bfHeader]])  # OLD
-  df$z <- rcompanion::blom(df[[bfHeader]])  # NEW
+  df$log.bf <- log(df[[bfHeader]])  # OLD
+  # df$z <- rcompanion::blom(df[[bfHeader]])  # NEW
   df$len <- getGeneLengths(rownames(df), lengthFile)
   df <- df[!is.na(df$len),]
   df$log.n <- log(df[[nHeader]])
   df$log.len <- log(df$len)
-  # linModsMsigdb <- runGeneSetLM(df, geneSetMsigdbEns, gene = geneHeader, stat = "log.bf", covars = covars)  # OLD
-  linModsMsigdb <- runGeneSetLM(df, geneSetMsigdbEns, gene = geneHeader, stat = "z", covars = covars)  # NEW
+  linModsMsigdb <- runGeneSetLM(df, geneSetMsigdbEns, gene = geneHeader, stat = "log.bf", covars = covars)  # OLD
+  # linModsMsigdb <- runGeneSetLM(df, geneSetMsigdbEns, gene = geneHeader, stat = "z", covars = covars)  # NEW
   linModStatsMsigdb <- getLMStats(linModsMsigdb)
-  # linModsTclin <- runGeneSetLM(df, geneSetTclinEns, gene = geneHeader, stat = "log.bf", covars = covars)  # OLD
-  linModsTclin <- runGeneSetLM(df, geneSetTclinEns, gene = geneHeader, stat = "z", covars = covars)  # NEW
+  linModsTclin <- runGeneSetLM(df, geneSetTclinEns, gene = geneHeader, stat = "log.bf", covars = covars)  # OLD
+  # linModsTclin <- runGeneSetLM(df, geneSetTclinEns, gene = geneHeader, stat = "z", covars = covars)  # NEW
   linModStatsTclin <- getLMStats(linModsTclin)
   
   msigdbPrefix <- paste(outPrefix, "gsa.msigdb", sep = ".")
