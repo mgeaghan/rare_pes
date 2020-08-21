@@ -111,182 +111,90 @@ getLogitStats <- function(logMods) {
 	return(logModStats)
 }
 
-getLMStats <- function(linMods) {
-	# generate a data frame of stats for all the linear models in the input list "linMods"
-	linModStats <- list()
-	for (s in names(linMods)) {
-		coefs <- summary(linMods[[s]])$coefficients
-		if ("set" %in% rownames(coefs)) {
-			set.p <- coefs["set", "Pr(>|t|)"]
-			set.beta <- coefs["set", "Estimate"]
-			set.se <- coefs["set", "Std. Error"]
-			set.t <- coefs["set", "t value"]
-		} else {
-			set.p <- NA
-			set.beta <- NA
-			set.se <- NA
-		  set.t <- NA
-		}
-		log.n.p <- coefs["log.n", "Pr(>|t|)"]
-		log.n.beta <- coefs["log.n", "Estimate"]
-		log.n.se <- coefs["log.n", "Std. Error"]
-		log.n.t <- coefs["log.n", "t value"]
-		log.len.p <- coefs["log.len", "Pr(>|t|)"]
-		log.len.beta <- coefs["log.len", "Estimate"]
-		log.len.se <- coefs["log.len", "Std. Error"]
-		log.len.t <- coefs["log.len", "t value"]
-		r2 <- summary(linMods[[s]])$adj.r.squared
-		linModStats[[s]] <- data.frame(set = s, set.p = set.p, set.beta = set.beta, set.se = set.se, set.t = set.t,
-		                               log.n.p = log.n.p, log.n.beta = log.n.beta, log.n.se = log.n.se, log.n.t = log.n.t,
-		                               log.len.p = log.len.p, log.len.beta = log.len.beta, log.len.se = log.len.se, log.len.t = log.len.t)
-	}
-	linModStats <- as.data.frame(do.call(rbind, linModStats))
-	# colnames(linModStats) <- c("set", "p")
-	linModStats$set.p.adj <- p.adjust(linModStats$set.p, method = "BH")
-	linModStats$set.n <- sapply(rownames(linModStats), function(x) {
-		return(table(linMods[[x]]$model$set)[2])
-	})
-	return(linModStats)
+getLMStats <- function(linMods, tail = "upper") {
+  # generate a data frame of stats for all the linear models in the input list "linMods"
+  linModStats <- list()
+  for (s in names(linMods)) {
+    coefs <- summary(linMods[[s]])$coefficients
+    if ("set" %in% rownames(coefs)) {
+      set.p <- coefs["set", "Pr(>|t|)"]
+      set.beta <- coefs["set", "Estimate"]
+      set.se <- coefs["set", "Std. Error"]
+      set.t <- coefs["set", "t value"]
+    } else {
+      set.p <- NA
+      set.beta <- NA
+      set.se <- NA
+      set.t <- NA
+    }
+    log.n.p <- coefs["log.n", "Pr(>|t|)"]
+    log.n.beta <- coefs["log.n", "Estimate"]
+    log.n.se <- coefs["log.n", "Std. Error"]
+    log.n.t <- coefs["log.n", "t value"]
+    log.len.p <- coefs["log.len", "Pr(>|t|)"]
+    log.len.beta <- coefs["log.len", "Estimate"]
+    log.len.se <- coefs["log.len", "Std. Error"]
+    log.len.t <- coefs["log.len", "t value"]
+    if (tail == "upper") {
+      set.p <- pt(set.t, linMods[[s]]$df, lower.tail = FALSE)
+      log.n.p <- pt(log.n.t, linMods[[s]]$df, lower.tail = FALSE)
+      log.len.p <- pt(log.len.t, linMods[[s]]$df, lower.tail = FALSE)
+    } else if (tail == "lower") {
+      set.p <- pt(set.t, linMods[[s]]$df, lower.tail = TRUE)
+      log.n.p <- pt(log.n.t, linMods[[s]]$df, lower.tail = TRUE)
+      log.len.p <- pt(log.len.t, linMods[[s]]$df, lower.tail = TRUE)
+    } else if (tail != "both") {
+      stop("getLMStats: argument to 'tail' must be either 'both', 'upper', or 'lower'.")
+    }
+    r2 <- summary(linMods[[s]])$adj.r.squared
+    linModStats[[s]] <- data.frame(set = s, set.p = set.p, set.beta = set.beta, set.se = set.se, set.t = set.t,
+                                   log.n.p = log.n.p, log.n.beta = log.n.beta, log.n.se = log.n.se, log.n.t = log.n.t,
+                                   log.len.p = log.len.p, log.len.beta = log.len.beta, log.len.se = log.len.se, log.len.t = log.len.t)
+  }
+  linModStats <- as.data.frame(do.call(rbind, linModStats))
+  # colnames(linModStats) <- c("set", "p")
+  linModStats$set.p.adj <- p.adjust(linModStats$set.p, method = "BH")
+  linModStats$set.n <- sapply(rownames(linModStats), function(x) {
+    return(table(linMods[[x]]$model$set)[2])
+  })
+  return(linModStats)
 }
 
-get_bm_convert <- function() {
+get_convert_ensId2Hgnc <- function() {
   # Download BioMart table to convert gene names
   library(reshape2)
   library(biomaRt)
   #ensembl <- useMart('ENSEMBL_MART_ENSEMBL', 'hsapiens_gene_ensembl', host = 'http://grch37.ensembl.org')
   ensembl <- useMart('ENSEMBL_MART_ENSEMBL', 'hsapiens_gene_ensembl')
-  bm <- getBM(attributes = c('ensembl_gene_id', 'external_gene_name'), mart = ensembl)
-  bm2 <- getBM(attributes = c('ensembl_gene_id', 'external_synonym'), mart = ensembl)
+  bm <- getBM(attributes = c('ensembl_gene_id', 'hgnc_symbol'), mart = ensembl)
   bm <- unique(bm)
-  bm2 <- unique(bm2)
   colnames(bm) <- c("gene.ensembl", "gene.name")
-  colnames(bm2) <- c("gene.ensembl", "gene.name")
   bm <- bm[bm$gene.name != "",]
-  bm2 <- bm2[bm2$gene.name != "",]
   bm <- bm[(!is.na(bm$gene.ensembl)) & (!is.na(bm$gene.name)),]
-  bm2 <- bm2[(!is.na(bm2$gene.ensembl)) & (!is.na(bm2$gene.name)),]
-  bm2 <- unique(rbind(bm2, bm))
-  convert <- merge(bm2, bm, by = "gene.ensembl", all.x = TRUE)
-  colnames(convert) <- c("gene.ensembl", "gene.name", "gene.name.ensembl")
-  return(unique(convert))
+  bm <- bm[!(bm$gene.ensembl %in% bm$gene.ensembl[duplicated(bm$gene.ensembl)]),]
+  return(unique(bm))
 }
 
-# Function to return a vector of Ensembl gene names for a given vector of gene symbols
-gene2EnsGene <- function(x, convertDf) {
-  id <- sapply(x, function(y) {
-    ids <- unique(convertDf$gene.name.ensembl[convertDf$gene.name == y])
-    if (length(ids) == 1) {
-      return(ids)
-    } else {
-      if (y %in% ids) {
-        return(y)
-      } else {
-        return(NA)
-      }
-    }
-  })
-  return(id)
-}
-
-# Function to return a vector of Ensembl gene IDs for a given vector of gene symbols
-gene2EnsId <- function(x, convertDf) {
-  id <- sapply(x, function(y) {
-    ids <- unique(convertDf$gene.ensembl[convertDf$gene.name == y])
-    if (length(ids) == 1) {
-      return(ids)
-    } else {
-      ids <- unique(convertDf$gene.ensembl[convertDf$gene.name.ensembl == y])
-      if (length(ids) == 1) {
-        return(ids)
-      } else {
-        return(NA)
-      }
-    }
-  })
-  return(id)
-}
-
-# Function to return a vector of Ensembl gene names for a given vector of Ensembl gene IDs
-ensId2EnsGene <- function(x, convertDf) {
-  id <- sapply(x, function(y) {
-    ids <- unique(convertDf$gene.name.ensembl[convertDf$gene.ensembl == y])
-    if (length(ids) == 1) {
-      return(ids)
-    } else {
-      return(NA)
-    }
-  })
-  return(id)
-}
-
-# Returns a more efficient lookup list for converting gene names to Ensembl gene names
-get_convert_gene2EnsGene <- function(convertDf) {
-  newDf <- convertDf[order(convertDf$gene.name),]
-  geneList <- unique(newDf$gene.name)
-  newList <- lapply(geneList, function(x) {
-    df <- unique(newDf[newDf$gene.name == x,])
-    if (dim(df)[1] == 1) {
-      return(c(x, df$gene.name.ensembl))
-    } else {
-      df <- unique(df[df$gene.name == df$gene.name.ensembl,])
-      if (dim(df)[1] == 1) {
-        return(c(x, df$gene.name.ensembl))
-      } else {
-        return(c(x, NA))
-      }
-    }
-  })
-  newDf <- as.data.frame(do.call(rbind, newList))
-  colnames(newDf) <- c("gene.name", "ensemble.ID")
-  rownames(newDf) <- newDf$gene.name
-  return(newDf)
-}
-
-# Returns a more efficient lookup list for converting gene names to Ensembl IDs
-get_convert_gene2EnsId <- function(convertDf) {
-  newDf <- convertDf[order(convertDf$gene.name),]
-  geneList <- unique(newDf$gene.name)
-  newList <- lapply(geneList, function(x) {
-    df <- unique(newDf[newDf$gene.name == x,])
-    if (dim(df)[1] == 1) {
-      return(c(x, df$gene.ensembl))
-    } else {
-      df <- unique(df[df$gene.name == df$gene.name.ensembl,])
-      if (dim(df)[1] == 1) {
-        return(c(x, df$gene.ensembl))
-      } else {
-        return(c(x, NA))
-      }
-    }
-  })
-  newDf <- as.data.frame(do.call(rbind, newList))
-  colnames(newDf) <- c("gene.name", "ensemble.ID")
-  rownames(newDf) <- newDf$gene.name
-  return(newDf)
-}
-
-# Convert gene sets to Ensembl gene names or IDs supplied in convertDf
-geneset2EnsGene <- function(x, convertDf) {
-  cols <- colnames(x)
-  newDf <- apply(x, c(1, 2), function(y) {
-    newId <- convertDf[y,2]
-    if (is.na(newId)) {
-      return("")
-    } else {
-      return(newId)
-    }
-  })
-  colnames(newDf) <- cols
-  return(newDf)
-}
-
-runGSA <- function(inputFile, lengthFile, geneHeader, pHeader, nHeader, covars, outPrefix, pThreshold = NA, alpha = 0.05) {
-  # read in gene-level results from study
+loadDf <- function(inputFile, rm.n0 = TRUE) {
   df <- read.csv(inputFile, header = TRUE)
   rownames(df) <- df[[geneHeader]]
   # remove genes with n (minor allele count) == 0
-  df <- df[df[[nHeader]] > 0,]
-  
+  if (rm.n0) {
+    df <- df[df[[nHeader]] > 0,]
+  }
+  return(df)
+}
+
+addLogNLogLen <- function(df, lengthFile, nHeader) {
+  df$len <- getGeneLengths(rownames(df), lengthFile)
+  df <- df[!is.na(df$len),]
+  df <- df[!is.na(df[[nHeader]]),]
+  df$log.n <- log(df[[nHeader]])
+  df$log.len <- log(df$len)
+  return(df)
+}
+
+runGSA <- function(df, geneSet, geneHeader, pHeader, covars, outPrefix, pThreshold = NA, alpha = 0.05, tail = "upper") {
   # apply pvalue threshold if present
   if (!is.na(pThreshold)) {
     df <- df[df[[pHeader]] < pThreshold,]
@@ -294,59 +202,34 @@ runGSA <- function(inputFile, lengthFile, geneHeader, pHeader, nHeader, covars, 
   
   df$p.finite <- getFinitePs(df[[pHeader]])
   df$z <- zTransformPValue(df$p.finite)
-  df$len <- getGeneLengths(rownames(df), lengthFile)
-  df <- df[!is.na(df$len),]
-  df$log.n <- log(df[[nHeader]])
-  df$log.len <- log(df$len)
-  linModsMsigdb <- runGeneSetLM(df, geneSetMsigdbEns, gene = geneHeader, covars = covars)
-  linModStatsMsigdb <- getLMStats(linModsMsigdb)
-  linModsTclin <- runGeneSetLM(df, geneSetTclinEns, gene = geneHeader, covars = covars)
-  linModStatsTclin <- getLMStats(linModsTclin)
   
-  msigdbPrefix <- paste(outPrefix, "gsa.msigdb", sep = ".")
-  tclinPrefix <- paste(outPrefix, "gsa.tclin", sep = ".")
+  linMods <- runGeneSetLM(df, geneSet, gene = geneHeader, covars = covars)
+  linModStats <- getLMStats(linMods, tail)
   
-  write.table(linModStatsMsigdb, paste(msigdbPrefix, ".txt", sep = ""), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
-  write.table(linModStatsTclin, paste(tclinPrefix, ".txt", sep = ""), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
-  write.table(linModStatsMsigdb$set[!is.na(linModStatsMsigdb$set.p) & linModStatsMsigdb$set.p < alpha], paste(msigdbPrefix, ".nomsigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
-  write.table(linModStatsTclin$set[!is.na(linModStatsTclin$set.p) & linModStatsTclin$set.p < alpha], paste(tclinPrefix, ".nomsigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
-  write.table(linModStatsMsigdb$set[!is.na(linModStatsMsigdb$set.p.adj) & linModStatsMsigdb$set.p.adj < alpha], paste(msigdbPrefix, ".sigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
-  write.table(linModStatsTclin$set[!is.na(linModStatsTclin$set.p.adj) & linModStatsTclin$set.p.adj < alpha], paste(tclinPrefix, ".sigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+  gsaPrefix <- paste(outPrefix, "gsa", sep = ".")
   
-  dfMsigdb <- addGeneSets(df, geneSetMsigdbEns, geneHeader)
-  dfTclin <- addGeneSets(df, geneSetTclinEns, geneHeader)
+  write.table(linModStats, paste(gsaPrefix, ".txt", sep = ""), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+  write.table(linModStats$set[!is.na(linModStats$set.p) & linModStats$set.p < alpha], paste(gsaPrefix, ".nomsigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+  write.table(linModStats$set[!is.na(linModStats$set.p.adj) & linModStats$set.p.adj < alpha], paste(gsaPrefix, ".sigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+  dfSets <- addGeneSets(df, geneSet, geneHeader)
   
-  write.csv(dfMsigdb, paste(msigdbPrefix, ".genes.txt", sep = ""), row.names = FALSE)
-  write.csv(dfTclin, paste(tclinPrefix, ".genes.txt", sep = ""), row.names = FALSE)
+  write.csv(dfSets, paste(gsaPrefix, ".genes.txt", sep = ""), row.names = FALSE)
 }
 
-runBfGSA <- function(df, lengthFile, geneHeader, bfHeader, nHeader, covars, outPrefix, alpha = 0.05) {
-  df$log.bf <- log(df[[bfHeader]])  # OLD
-  # df$z <- rcompanion::blom(df[[bfHeader]])  # NEW
-  df$len <- getGeneLengths(rownames(df), lengthFile)
-  df <- df[!is.na(df$len),]
-  df$log.n <- log(df[[nHeader]])
-  df$log.len <- log(df$len)
-  linModsMsigdb <- runGeneSetLM(df, geneSetMsigdbEns, gene = geneHeader, stat = "log.bf", covars = covars)  # OLD
-  # linModsMsigdb <- runGeneSetLM(df, geneSetMsigdbEns, gene = geneHeader, stat = "z", covars = covars)  # NEW
-  linModStatsMsigdb <- getLMStats(linModsMsigdb)
-  linModsTclin <- runGeneSetLM(df, geneSetTclinEns, gene = geneHeader, stat = "log.bf", covars = covars)  # OLD
-  # linModsTclin <- runGeneSetLM(df, geneSetTclinEns, gene = geneHeader, stat = "z", covars = covars)  # NEW
-  linModStatsTclin <- getLMStats(linModsTclin)
+runBfGSA <- function(df, geneSet, geneHeader, bfHeader, covars, outPrefix, alpha = 0.05, tail = "upper") {
+  df$log.bf <- log(df[[bfHeader]])
   
-  msigdbPrefix <- paste(outPrefix, "gsa.msigdb", sep = ".")
-  tclinPrefix <- paste(outPrefix, "gsa.tclin", sep = ".")
+  linMods <- runGeneSetLM(df, geneSet, gene = geneHeader, stat = "log.bf", covars = covars)
+  linModStats <- getLMStats(linMods, tail)
   
-  write.table(linModStatsMsigdb, paste(msigdbPrefix, ".txt", sep = ""), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
-  write.table(linModStatsTclin, paste(tclinPrefix, ".txt", sep = ""), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
-  write.table(linModStatsMsigdb$set[!is.na(linModStatsMsigdb$set.p) & linModStatsMsigdb$set.p < alpha], paste(msigdbPrefix, ".nomsigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
-  write.table(linModStatsTclin$set[!is.na(linModStatsTclin$set.p) & linModStatsTclin$set.p < alpha], paste(tclinPrefix, ".nomsigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
-  write.table(linModStatsMsigdb$set[!is.na(linModStatsMsigdb$set.p.adj) & linModStatsMsigdb$set.p.adj < alpha], paste(msigdbPrefix, ".sigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
-  write.table(linModStatsTclin$set[!is.na(linModStatsTclin$set.p.adj) & linModStatsTclin$set.p.adj < alpha], paste(tclinPrefix, ".sigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
-  
-  dfMsigdb <- addGeneSets(df, geneSetMsigdbEns, geneHeader)
-  dfTclin <- addGeneSets(df, geneSetTclinEns, geneHeader)
-  
-  write.csv(dfMsigdb, paste(msigdbPrefix, ".genes.txt", sep = ""), row.names = FALSE)
-  write.csv(dfTclin, paste(tclinPrefix, ".genes.txt", sep = ""), row.names = FALSE)
+  gsaPrefix <- paste(outPrefix, "gsa", sep = ".")
+
+  write.table(linModStats, paste(gsaPrefix, ".txt", sep = ""), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+  write.table(linModStats$set[!is.na(linModStats$set.p) & linModStats$set.p < alpha], paste(gsaPrefix, ".nomsigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+  write.table(linModStats$set[!is.na(linModStats$set.p.adj) & linModStats$set.p.adj < alpha], paste(gsaPrefix, ".sigsets.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+  dfSets <- addGeneSets(df, geneSet, geneHeader)
+
+  write.csv(dfSets, paste(gsaPrefix, ".genes.txt", sep = ""), row.names = FALSE)
 }
