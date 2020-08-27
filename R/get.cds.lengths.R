@@ -9,7 +9,8 @@ bm2 <- bm2[bm2$gene.name != "",]
 bm2 <- bm2[(!is.na(bm2$gene.ensembl)) & (!is.na(bm2$gene.name)),]
 bm2 <- bm2[!(bm2$gene.ensembl %in% bm2$gene.ensembl[duplicated(bm2$gene.ensembl)]),]
 rownames(bm2) <- bm2$gene.ensembl
-chrs <- c(seq(1, 22), 'X', 'Y', 'MT')
+# chrs <- c(seq(1, 22), 'X', 'Y', 'MT')
+chrs <- c(seq(1, 22))
 chrs
 bm.filt <- bm[bm$chromosome_name %in% chrs & !is.na(bm$genomic_coding_start) & !is.na(bm$genomic_coding_end) & bm$transcript_biotype == 'protein_coding', ]
 # Also remove two erroneous gene entries (gene names are duplicated and are on different chromosomes):
@@ -26,8 +27,8 @@ bm.filt.sort.merge <- list()
 listIdx = 1
 for (i in 2:dim(bm.filt.sort)[1]) {
   row <- bm.filt.sort[i,]
-  gene <- as.character(row[6])
-  prevGene <- as.character(prevRow[6])
+  gene <- as.character(row[10])
+  prevGene <- as.character(prevRow[10])
   chr <- as.character(row[7])
   prevChr <- as.character(prevRow[7])
   start <- as.numeric(row[8])
